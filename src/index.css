@@ -1,0 +1,139 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 45 20% 96%;
+    --foreground: 280 5% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 280 5% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 280 5% 15%;
+
+    --primary: 330 85% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 52 98% 65%;
+    --secondary-foreground: 280 5% 15%;
+
+    --muted: 45 20% 90%;
+    --muted-foreground: 280 5% 45%;
+
+    --accent: 180 100% 50%;
+    --accent-foreground: 280 5% 15%;
+
+    --destructive: 0 85% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 280 10% 85%;
+    --input: 280 10% 85%;
+    --ring: 330 85% 55%;
+
+    --radius: 0.25rem;
+
+    --retro-cyan: 180 100% 50%;
+    --retro-magenta: 330 85% 55%;
+    --retro-yellow: 52 98% 65%;
+    --retro-orange: 15 85% 60%;
+    --retro-purple: 270 60% 60%;
+    
+    --gradient-retro: linear-gradient(135deg, hsl(var(--retro-cyan)), hsl(var(--retro-magenta)));
+    --gradient-sunset: linear-gradient(180deg, hsl(var(--retro-orange)), hsl(var(--retro-magenta)));
+    
+    --shadow-neon: 0 0 20px hsl(var(--retro-cyan) / 0.5);
+    --shadow-glow: 0 0 30px hsl(var(--retro-magenta) / 0.4);
+  }
+
+  .dark {
+    --background: 280 15% 8%;
+    --foreground: 0 0% 95%;
+
+    --card: 280 15% 12%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 280 15% 10%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 330 85% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 52 98% 65%;
+    --secondary-foreground: 280 5% 15%;
+
+    --muted: 280 15% 18%;
+    --muted-foreground: 0 0% 60%;
+
+    --accent: 180 100% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 85% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 280 15% 22%;
+    --input: 280 15% 18%;
+    --ring: 330 85% 55%;
+
+    --retro-cyan: 180 100% 50%;
+    --retro-magenta: 330 85% 55%;
+    --retro-yellow: 52 98% 65%;
+    --retro-orange: 15 85% 60%;
+    --retro-purple: 270 60% 60%;
+    
+    --gradient-retro: linear-gradient(135deg, hsl(var(--retro-cyan)), hsl(var(--retro-magenta)));
+    --gradient-sunset: linear-gradient(180deg, hsl(var(--retro-orange)), hsl(var(--retro-magenta)));
+    
+    --shadow-neon: 0 0 20px hsl(var(--retro-cyan) / 0.6);
+    --shadow-glow: 0 0 30px hsl(var(--retro-magenta) / 0.5);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+  
+  .scanline {
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .scanline::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.03) 2px,
+      rgba(0, 0, 0, 0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 1;
+  }
+  
+  .dark .scanline::before {
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(255, 255, 255, 0.02) 2px,
+      rgba(255, 255, 255, 0.02) 4px
+    );
+  }
+}
