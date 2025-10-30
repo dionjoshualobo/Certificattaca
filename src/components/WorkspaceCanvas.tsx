@@ -6,6 +6,77 @@ import { DatasetPreview, ColumnMapping } from "./DatasetPreview";
 import { toast } from "sonner";
 import JSZip from "jszip";
 
+// SVG component for curved arrows
+const CurvedArrow = ({ 
+  start, 
+  end, 
+  isActive = false, 
+  color = "#8B4513" 
+}: { 
+  start: { x: number; y: number }; 
+  end: { x: number; y: number }; 
+  isActive?: boolean;
+  color?: string;
+}) => {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  
+  // Create a fun curved path with multiple control points
+  const curvature = Math.min(distance / 3, 100);
+  const perpX = -dy / distance;
+  const perpY = dx / distance;
+  
+  const controlX1 = start.x + dx * 0.3 + perpX * curvature * 0.8;
+  const controlY1 = start.y + dy * 0.3 + perpY * curvature * 0.8;
+  
+  const controlX2 = start.x + dx * 0.7 - perpX * curvature * 0.8;
+  const controlY2 = start.y + dy * 0.7 - perpY * curvature * 0.8;
+  
+  const pathData = `M ${start.x} ${start.y} C ${controlX1} ${controlY1}, ${controlX2} ${controlY2}, ${end.x} ${end.y}`;
+  
+  const markerId = `arrowhead-${isActive ? 'active' : 'normal'}-${Math.random().toString(36).substr(2, 9)}`;
+  
+  return (
+    <svg 
+      className={isActive ? "fixed inset-0 pointer-events-none" : "absolute inset-0 pointer-events-none"}
+      style={{
+        zIndex: isActive ? 40 : 5,
+        overflow: 'visible',
+        width: '100vw',
+        height: '100vh'
+      }}
+    >
+      <defs>
+        <marker
+          id={markerId}
+          markerWidth="12"
+          markerHeight="8"
+          refX="10"
+          refY="4"
+          orient="auto"
+          markerUnits="strokeWidth"
+        >
+          <polygon
+            points="0 0, 12 4, 0 8"
+            fill={isActive ? "#FF6B6B" : color}
+          />
+        </marker>
+      </defs>
+      <path
+        d={pathData}
+        stroke={isActive ? "#FF6B6B" : color}
+        strokeWidth={isActive ? "4" : "3"}
+        fill="none"
+        strokeDasharray={isActive ? "8,4" : "none"}
+        markerEnd={`url(#${markerId})`}
+        className={isActive ? "animate-pulse" : ""}
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+};
+
 interface WorkspaceCanvasProps {
   templateUrl: string;
   columns: string[];
@@ -20,6 +91,7 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
   const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
   const [hoveredBox, setHoveredBox] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
@@ -41,6 +113,48 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
     window.addEventListener("resize", updateImageSize);
     return () => window.removeEventListener("resize", updateImageSize);
   }, [templateUrl]);
+
+  // Global mouse move listener for drag tracking
+  useEffect(() => {
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (draggingColumn && imageRef.current) {
+        // Check if mouse is over any box
+        const rect = imageRef.current.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / scale;
+        const y = (e.clientY - rect.top) / scale;
+
+        const currentHoveredBox = boxes.find(
+          (box) =>
+            x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height
+        );
+
+        if (currentHoveredBox) {
+          setHoveredBox(currentHoveredBox.id);
+          
+          // When hovering over a box, snap the visual endpoint to the box center
+          const boxCenterX = rect.left + (currentHoveredBox.x + currentHoveredBox.width / 2) * scale;
+          const boxCenterY = rect.top + (currentHoveredBox.y + currentHoveredBox.height / 2) * scale;
+          
+          setMousePos({ 
+            x: boxCenterX, 
+            y: boxCenterY 
+          });
+        } else {
+          setHoveredBox(null);
+          // When not hovering over a box, follow the actual mouse position
+          setMousePos({
+            x: e.clientX,
+            y: e.clientY
+          });
+        }
+      }
+    };
+
+    if (draggingColumn) {
+      document.addEventListener('mousemove', handleGlobalMouseMove);
+      return () => document.removeEventListener('mousemove', handleGlobalMouseMove);
+    }
+  }, [draggingColumn, boxes, scale]);
 
   const addBox = () => {
     const newBox: BoxPosition = {
@@ -66,54 +180,123 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
 
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
     if (draggingColumn && imageRef.current) {
-      setMousePos({ x: e.clientX, y: e.clientY });
-      
       // Check if mouse is over any box
       const rect = imageRef.current.getBoundingClientRect();
       const x = (e.clientX - rect.left) / scale;
       const y = (e.clientY - rect.top) / scale;
 
-      const hoveredBox = boxes.find(
+      const currentHoveredBox = boxes.find(
         (box) =>
           x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height
       );
 
-      if (hoveredBox) {
-        setHoveredBox(hoveredBox.id);
+      if (currentHoveredBox) {
+        setHoveredBox(currentHoveredBox.id);
         
-        // Auto-attach when hovering
-        const existingMapping = columnMappings.find((m) => m.columnId === draggingColumn);
+        // When hovering over a box, snap the visual endpoint to the box center
+        const gridContainer = containerRef.current?.closest('.grid');
+        const gridRect = gridContainer ? gridContainer.getBoundingClientRect() : { left: 0, top: 0 };
         
-        if (existingMapping) {
-          setColumnMappings(
-            columnMappings.map((m) =>
-              m.columnId === draggingColumn ? { ...m, boxId: hoveredBox.id } : m
-            )
-          );
-        } else {
-          setColumnMappings([
-            ...columnMappings,
-            { columnId: draggingColumn, boxId: hoveredBox.id },
-          ]);
-        }
-
-        setBoxes(
-          boxes.map((b) =>
-            b.id === hoveredBox.id ? { ...b, columnId: draggingColumn } : b
-          )
-        );
+        const boxCenterX = rect.left - gridRect.left + (currentHoveredBox.x + currentHoveredBox.width / 2) * scale;
+        const boxCenterY = rect.top - gridRect.top + (currentHoveredBox.y + currentHoveredBox.height / 2) * scale;
+        
+        setMousePos({ 
+          x: boxCenterX + gridRect.left, 
+          y: boxCenterY + gridRect.top 
+        });
       } else {
         setHoveredBox(null);
+        // When not hovering over a box, follow the actual mouse position
+        setMousePos({ 
+          x: e.clientX, 
+          y: e.clientY 
+        });
       }
     }
   };
 
+  const handleColumnDragStart = (columnId: string, startPos: { x: number; y: number }) => {
+    setDraggingColumn(columnId);
+    setDragStartPos(startPos);
+    setIsDragging(true);
+    setMousePos(startPos);
+  };
+
   const handleDragEnd = () => {
     if (draggingColumn && hoveredBox) {
-      toast.success(`Mapped "${draggingColumn}" to box`);
+      // Find if this column is already mapped to another box
+      const existingMapping = columnMappings.find((m) => m.columnId === draggingColumn);
+      
+      if (existingMapping) {
+        // Update existing mapping
+        setColumnMappings(
+          columnMappings.map((m) =>
+            m.columnId === draggingColumn ? { ...m, boxId: hoveredBox } : m
+          )
+        );
+      } else {
+        // Create new mapping
+        setColumnMappings([
+          ...columnMappings,
+          { columnId: draggingColumn, boxId: hoveredBox },
+        ]);
+      }
+
+      // Update the box to show which column it's mapped to
+      setBoxes(
+        boxes.map((b) =>
+          b.id === hoveredBox ? { ...b, columnId: draggingColumn } : b
+        )
+      );
+
+      toast.success(`Mapped "${draggingColumn}" to ${hoveredBox}`);
     }
+    
     setDraggingColumn(null);
     setHoveredBox(null);
+    setIsDragging(false);
+  };
+
+  const getConnectionLines = () => {
+    const connections: Array<{
+      start: { x: number; y: number };
+      end: { x: number; y: number };
+      columnId: string;
+      boxId: string;
+    }> = [];
+
+    columnMappings.forEach((mapping) => {
+      if (mapping.boxId) {
+        const box = boxes.find(b => b.id === mapping.boxId);
+        if (box && imageRef.current) {
+          // Calculate start position (from dataset preview)
+          const datasetElement = document.querySelector(`[data-column="${mapping.columnId}"]`);
+          if (datasetElement) {
+            const datasetRect = datasetElement.getBoundingClientRect();
+            const imageRect = imageRef.current.getBoundingClientRect();
+            
+            // Get the grid container rect for proper positioning
+            const gridContainer = containerRef.current?.closest('.grid');
+            const gridRect = gridContainer ? gridContainer.getBoundingClientRect() : { left: 0, top: 0 };
+            
+            const start = {
+              x: datasetRect.left + datasetRect.width / 2 - gridRect.left,
+              y: datasetRect.bottom - gridRect.top
+            };
+
+            // Calculate end position (center of the box)
+            const end = {
+              x: imageRect.left - gridRect.left + (box.x + box.width / 2) * scale,
+              y: imageRect.top - gridRect.top + (box.y + box.height / 2) * scale
+            };
+
+            connections.push({ start, end, columnId: mapping.columnId, boxId: mapping.boxId });
+          }
+        }
+      }
+    });
+
+    return connections;
   };
 
   const generateCertificates = async () => {
@@ -220,7 +403,7 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 relative">
         <div className="lg:col-span-2">
           <div
             ref={containerRef}
@@ -262,17 +445,24 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
           <DatasetPreview
             columns={columns}
             rows={rows}
-            onColumnDragStart={(col, pos) => {
-              setDraggingColumn(col);
-              setDragStartPos(pos);
-              setMousePos(pos);
-            }}
+            onColumnDragStart={handleColumnDragStart}
             onColumnDragEnd={handleDragEnd}
             columnMappings={columnMappings}
           />
         </div>
+
+        {/* Render connection lines */}
+        {!isDragging && getConnectionLines().map((connection, index) => (
+          <CurvedArrow
+            key={`${connection.columnId}-${connection.boxId}`}
+            start={connection.start}
+            end={connection.end}
+            color="#8B4513"
+          />
+        ))}
       </div>
 
+      {/* Active drag line with fun curves */}
       {draggingColumn && (
         <>
           <svg
@@ -281,33 +471,63 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
           >
             <defs>
               <marker
-                id="arrowhead"
-                markerWidth="10"
-                markerHeight="10"
-                refX="9"
-                refY="3"
+                id="drag-arrowhead"
+                markerWidth="12"
+                markerHeight="8"
+                refX="10"
+                refY="4"
                 orient="auto"
               >
                 <polygon
-                  points="0 0, 10 3, 0 6"
-                  fill="#8B4513"
+                  points="0 0, 12 4, 0 8"
+                  fill={hoveredBox ? "#4ADE80" : "#FF6B6B"}
                 />
               </marker>
             </defs>
-            <line
-              x1={dragStartPos.x}
-              y1={dragStartPos.y}
-              x2={mousePos.x}
-              y2={mousePos.y}
-              stroke="#8B4513"
-              strokeWidth="3"
-              strokeDasharray="5,5"
-              markerEnd="url(#arrowhead)"
-              className="animate-pulse"
+            <path
+              d={`M ${dragStartPos.x} ${dragStartPos.y} Q ${(dragStartPos.x + mousePos.x) / 2} ${dragStartPos.y - 50} ${mousePos.x} ${mousePos.y}`}
+              stroke={hoveredBox ? "#4ADE80" : "#FF6B6B"}
+              strokeWidth={hoveredBox ? "5" : "4"}
+              fill="none"
+              strokeDasharray={hoveredBox ? "none" : "8,4"}
+              markerEnd="url(#drag-arrowhead)"
+              className={hoveredBox ? "animate-bounce" : "animate-pulse"}
+              strokeLinecap="round"
             />
+            {/* Add a glow effect and target circle when hovering over a box */}
+            {hoveredBox && (
+              <>
+                <path
+                  d={`M ${dragStartPos.x} ${dragStartPos.y} Q ${(dragStartPos.x + mousePos.x) / 2} ${dragStartPos.y - 50} ${mousePos.x} ${mousePos.y}`}
+                  stroke="#4ADE80"
+                  strokeWidth="8"
+                  fill="none"
+                  opacity="0.3"
+                  strokeLinecap="round"
+                  className="animate-pulse"
+                />
+                <circle
+                  cx={mousePos.x}
+                  cy={mousePos.y}
+                  r="8"
+                  fill="#4ADE80"
+                  stroke="#065F46"
+                  strokeWidth="2"
+                  className="animate-ping"
+                />
+                <circle
+                  cx={mousePos.x}
+                  cy={mousePos.y}
+                  r="4"
+                  fill="#4ADE80"
+                  stroke="#065F46"
+                  strokeWidth="1"
+                />
+              </>
+            )}
           </svg>
-          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-[#8B4513] text-[#F5E6D3] px-6 py-3 border-2 border-[#654321] shadow-[0_4px_0_#654321] font-bold z-50 font-body">
-            {hoveredBox ? `Attaching "${draggingColumn}"...` : `Drag to text box to map "${draggingColumn}"`}
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-[#8B4513] text-[#F5E6D3] px-6 py-3 border-2 border-[#654321] shadow-[0_4px_0_#654321] font-bold z-50 font-body uppercase tracking-wide">
+            {hoveredBox ? `🎯 Ready to connect "${draggingColumn}" to ${hoveredBox}!` : `🎨 Drag "${draggingColumn}" to any text box`}
           </div>
         </>
       )}
