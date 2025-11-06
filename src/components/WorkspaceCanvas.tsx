@@ -179,39 +179,37 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
   };
 
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
-    if (draggingColumn && imageRef.current) {
-      // Check if mouse is over any box
-      const rect = imageRef.current.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / scale;
-      const y = (e.clientY - rect.top) / scale;
+    // Only handle mouse move if we're dragging a column
+    if (!draggingColumn || !imageRef.current) return;
+    
+    // Check if mouse is over any box
+    const rect = imageRef.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / scale;
+    const y = (e.clientY - rect.top) / scale;
 
-      const currentHoveredBox = boxes.find(
-        (box) =>
-          x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height
-      );
+    const currentHoveredBox = boxes.find(
+      (box) =>
+        x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height
+    );
 
-      if (currentHoveredBox) {
-        setHoveredBox(currentHoveredBox.id);
-        
-        // When hovering over a box, snap the visual endpoint to the box center
-        const gridContainer = containerRef.current?.closest('.grid');
-        const gridRect = gridContainer ? gridContainer.getBoundingClientRect() : { left: 0, top: 0 };
-        
-        const boxCenterX = rect.left - gridRect.left + (currentHoveredBox.x + currentHoveredBox.width / 2) * scale;
-        const boxCenterY = rect.top - gridRect.top + (currentHoveredBox.y + currentHoveredBox.height / 2) * scale;
-        
-        setMousePos({ 
-          x: boxCenterX + gridRect.left, 
-          y: boxCenterY + gridRect.top 
-        });
-      } else {
-        setHoveredBox(null);
-        // When not hovering over a box, follow the actual mouse position
-        setMousePos({ 
-          x: e.clientX, 
-          y: e.clientY 
-        });
-      }
+    if (currentHoveredBox) {
+      setHoveredBox(currentHoveredBox.id);
+      
+      // When hovering over a box, snap the visual endpoint to the box center
+      const boxCenterX = rect.left + (currentHoveredBox.x + currentHoveredBox.width / 2) * scale;
+      const boxCenterY = rect.top + (currentHoveredBox.y + currentHoveredBox.height / 2) * scale;
+      
+      setMousePos({ 
+        x: boxCenterX, 
+        y: boxCenterY 
+      });
+    } else {
+      setHoveredBox(null);
+      // When not hovering over a box, follow the actual mouse position
+      setMousePos({ 
+        x: e.clientX, 
+        y: e.clientY 
+      });
     }
   };
 
@@ -408,8 +406,8 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
           <div
             ref={containerRef}
             className="relative border-4 border-[#8B4513] rounded-lg overflow-hidden bg-[#F5E6D3] shadow-[inset_0_0_20px_rgba(139,69,19,0.2)]"
-            onMouseMove={handleCanvasMouseMove}
-            onMouseUp={handleDragEnd}
+            onMouseMove={draggingColumn ? handleCanvasMouseMove : undefined}
+            onMouseUp={draggingColumn ? handleDragEnd : undefined}
             style={{ cursor: draggingColumn ? "crosshair" : "default" }}
           >
             <img

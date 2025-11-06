@@ -25,60 +25,156 @@ export const DraggableBox = ({ box, onUpdate, onDelete, scale, isDraggingColumn,
   const [isResizing, setIsResizing] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const startPos = useRef({ x: 0, y: 0, boxX: 0, boxY: 0, width: 0, height: 0 });
+  const animationFrameRef = useRef<number | null>(null);
+  const pendingUpdateRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+  const lastMousePos = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
+      // Store mouse position for smooth interpolation
+      lastMousePos.current = { x: e.clientX, y: e.clientY };
+      
       if (isDragging) {
-        const dx = (e.clientX - startPos.current.x) / scale;
-        const dy = (e.clientY - startPos.current.y) / scale;
-        onUpdate({
-          ...box,
-          x: startPos.current.boxX + dx,
-          y: startPos.current.boxY + dy,
-        });
+        e.preventDefault();
+        const dx = (lastMousePos.current.x - startPos.current.x) / scale;
+        const dy = (lastMousePos.current.y - startPos.current.y) / scale;
+        
+        // Store the pending update without rounding
+        const newX = Math.max(0, startPos.current.boxX + dx);
+        const newY = Math.max(0, startPos.current.boxY + dy);
+        
+        pendingUpdateRef.current = {
+          x: newX,
+          y: newY,
+          width: box.width,
+          height: box.height,
+        };
+        
+        // Schedule update on next animation frame if not already scheduled
+        if (animationFrameRef.current === null) {
+          animationFrameRef.current = requestAnimationFrame(() => {
+            if (pendingUpdateRef.current) {
+              onUpdate({
+                ...box,
+                x: pendingUpdateRef.current.x,
+                y: pendingUpdateRef.current.y,
+                width: pendingUpdateRef.current.width,
+                height: pendingUpdateRef.current.height,
+              });
+              pendingUpdateRef.current = null;
+            }
+            animationFrameRef.current = null;
+          });
+        }
       } else if (isResizing) {
-        const dx = (e.clientX - startPos.current.x) / scale;
-        const dy = (e.clientY - startPos.current.y) / scale;
+        e.preventDefault();
+        const dx = (lastMousePos.current.x - startPos.current.x) / scale;
+        const dy = (lastMousePos.current.y - startPos.current.y) / scale;
         
         let newWidth = startPos.current.width;
         let newHeight = startPos.current.height;
-        let newX = box.x;
-        let newY = box.y;
+        let newX = startPos.current.boxX;
+        let newY = startPos.current.boxY;
 
         if (isResizing.includes("e")) newWidth = Math.max(50, startPos.current.width + dx);
         if (isResizing.includes("w")) {
-          newWidth = Math.max(50, startPos.current.width - dx);
-          newX = startPos.current.boxX + dx;
+          const deltaWidth = Math.min(dx, startPos.current.width - 50);
+          newWidth = startPos.current.width - deltaWidth;
+          newX = startPos.current.boxX + deltaWidth;
         }
         if (isResizing.includes("s")) newHeight = Math.max(30, startPos.current.height + dy);
         if (isResizing.includes("n")) {
-          newHeight = Math.max(30, startPos.current.height - dy);
-          newY = startPos.current.boxY + dy;
+          const deltaHeight = Math.min(dy, startPos.current.height - 30);
+          newHeight = startPos.current.height - deltaHeight;
+          newY = startPos.current.boxY + deltaHeight;
         }
 
-        onUpdate({ ...box, x: newX, y: newY, width: newWidth, height: newHeight });
+        // Ensure boxes stay within bounds
+        newX = Math.max(0, newX);
+        newY = Math.max(0, newY);
+
+        // Store pending update without rounding
+        pendingUpdateRef.current = {
+          x: newX,
+          y: newY,
+          width: newWidth,
+          height: newHeight,
+        };
+        
+        // Schedule update on next animation frame if not already scheduled
+        if (animationFrameRef.current === null) {
+          animationFrameRef.current = requestAnimationFrame(() => {
+            if (pendingUpdateRef.current) {
+              onUpdate({
+                ...box,
+                x: pendingUpdateRef.current.x,
+                y: pendingUpdateRef.current.y,
+                width: pendingUpdateRef.current.width,
+                height: pendingUpdateRef.current.height,
+              });
+              pendingUpdateRef.current = null;
+            }
+            animationFrameRef.current = null;
+          });
+        }
       }
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: MouseEvent) => {
+      e.preventDefault();
+      
+      // Cancel any pending animation frame
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      
+      // Apply any pending update immediately
+      if (pendingUpdateRef.current) {
+        onUpdate({
+          ...box,
+          x: pendingUpdateRef.current.x,
+          y: pendingUpdateRef.current.y,
+          width: pendingUpdateRef.current.width,
+          height: pendingUpdateRef.current.height,
+        });
+        pendingUpdateRef.current = null;
+      }
+      
       setIsDragging(false);
       setIsResizing(null);
+      document.body.style.userSelect = ''; // Re-enable text selection
+      document.body.style.cursor = ''; // Reset cursor
     };
 
     if (isDragging || isResizing) {
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
+      // Disable text selection and set cursor during drag
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = isDragging ? 'move' : 'resize';
+      
+      document.addEventListener("mousemove", handleMouseMove, { passive: false });
+      document.addEventListener("mouseup", handleMouseUp, { passive: false });
     }
 
     return () => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      
+      // Clean up animation frame on unmount
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
     };
   }, [isDragging, isResizing, box, onUpdate, scale]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (isDraggingColumn) return; // Disable during column drag
+    e.preventDefault();
     e.stopPropagation();
+    
     setIsDragging(true);
     startPos.current = {
       x: e.clientX,
@@ -92,7 +188,9 @@ export const DraggableBox = ({ box, onUpdate, onDelete, scale, isDraggingColumn,
 
   const handleResizeStart = (direction: string) => (e: React.MouseEvent) => {
     if (isDraggingColumn) return; // Disable during column drag
+    e.preventDefault();
     e.stopPropagation();
+    
     setIsResizing(direction);
     startPos.current = {
       x: e.clientX,
@@ -107,7 +205,7 @@ export const DraggableBox = ({ box, onUpdate, onDelete, scale, isDraggingColumn,
   return (
     <div
       ref={boxRef}
-      className={`absolute border-2 group transition-all ${
+      className={`absolute border-2 group transition-none ${
         isDraggingColumn 
           ? isHovered
             ? 'border-[#8B4513] bg-[#8B4513]/40 shadow-[0_0_20px_rgba(139,69,19,0.8)] animate-pulse cursor-crosshair'
@@ -119,6 +217,7 @@ export const DraggableBox = ({ box, onUpdate, onDelete, scale, isDraggingColumn,
         top: `${box.y}px`,
         width: `${box.width}px`,
         height: `${box.height}px`,
+        willChange: isDragging || isResizing ? 'transform' : 'auto',
       }}
       onMouseDown={handleMouseDown}
     >
@@ -140,35 +239,35 @@ export const DraggableBox = ({ box, onUpdate, onDelete, scale, isDraggingColumn,
       {!isDraggingColumn && (
         <>
           <div
-            className="absolute -top-1 -left-1 w-3 h-3 bg-[#8B4513] rounded-full cursor-nw-resize border border-[#654321]"
+            className="absolute -top-2 -left-2 w-4 h-4 bg-[#8B4513] rounded-full cursor-nw-resize border-2 border-[#654321] hover:bg-[#654321] transition-colors opacity-0 group-hover:opacity-100"
             onMouseDown={handleResizeStart("nw")}
           />
           <div
-            className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#8B4513] rounded-full cursor-n-resize border border-[#654321]"
+            className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-[#8B4513] rounded-full cursor-n-resize border-2 border-[#654321] hover:bg-[#654321] transition-colors opacity-0 group-hover:opacity-100"
             onMouseDown={handleResizeStart("n")}
           />
           <div
-            className="absolute -top-1 -right-1 w-3 h-3 bg-[#8B4513] rounded-full cursor-ne-resize border border-[#654321]"
+            className="absolute -top-2 -right-2 w-4 h-4 bg-[#8B4513] rounded-full cursor-ne-resize border-2 border-[#654321] hover:bg-[#654321] transition-colors opacity-0 group-hover:opacity-100"
             onMouseDown={handleResizeStart("ne")}
           />
           <div
-            className="absolute top-1/2 -translate-y-1/2 -right-1 w-3 h-3 bg-[#8B4513] rounded-full cursor-e-resize border border-[#654321]"
+            className="absolute top-1/2 -translate-y-1/2 -right-2 w-4 h-4 bg-[#8B4513] rounded-full cursor-e-resize border-2 border-[#654321] hover:bg-[#654321] transition-colors opacity-0 group-hover:opacity-100"
             onMouseDown={handleResizeStart("e")}
           />
           <div
-            className="absolute -bottom-1 -right-1 w-3 h-3 bg-[#8B4513] rounded-full cursor-se-resize border border-[#654321]"
+            className="absolute -bottom-2 -right-2 w-4 h-4 bg-[#8B4513] rounded-full cursor-se-resize border-2 border-[#654321] hover:bg-[#654321] transition-colors opacity-0 group-hover:opacity-100"
             onMouseDown={handleResizeStart("se")}
           />
           <div
-            className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#8B4513] rounded-full cursor-s-resize border border-[#654321]"
+            className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-[#8B4513] rounded-full cursor-s-resize border-2 border-[#654321] hover:bg-[#654321] transition-colors opacity-0 group-hover:opacity-100"
             onMouseDown={handleResizeStart("s")}
           />
           <div
-            className="absolute -bottom-1 -left-1 w-3 h-3 bg-[#8B4513] rounded-full cursor-sw-resize border border-[#654321]"
+            className="absolute -bottom-2 -left-2 w-4 h-4 bg-[#8B4513] rounded-full cursor-sw-resize border-2 border-[#654321] hover:bg-[#654321] transition-colors opacity-0 group-hover:opacity-100"
             onMouseDown={handleResizeStart("sw")}
           />
           <div
-            className="absolute top-1/2 -translate-y-1/2 -left-1 w-3 h-3 bg-[#8B4513] rounded-full cursor-w-resize border border-[#654321]"
+            className="absolute top-1/2 -translate-y-1/2 -left-2 w-4 h-4 bg-[#8B4513] rounded-full cursor-w-resize border-2 border-[#654321] hover:bg-[#654321] transition-colors opacity-0 group-hover:opacity-100"
             onMouseDown={handleResizeStart("w")}
           />
         </>
