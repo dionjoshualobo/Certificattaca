@@ -22,58 +22,45 @@ const CurvedArrow = ({
   const dy = end.y - start.y;
   const distance = Math.sqrt(dx * dx + dy * dy);
   
-  // Create a fun curved path with multiple control points
+  // Create a curved path
   const curvature = Math.min(distance / 3, 100);
-  const perpX = -dy / distance;
-  const perpY = dx / distance;
+  const midX = (start.x + end.x) / 2;
+  const midY = (start.y + end.y) / 2;
   
-  const controlX1 = start.x + dx * 0.3 + perpX * curvature * 0.8;
-  const controlY1 = start.y + dy * 0.3 + perpY * curvature * 0.8;
+  // Control point for the curve (offset perpendicular to the line)
+  const controlX = midX + (dy / distance) * curvature;
+  const controlY = midY - (dx / distance) * curvature;
   
-  const controlX2 = start.x + dx * 0.7 - perpX * curvature * 0.8;
-  const controlY2 = start.y + dy * 0.7 - perpY * curvature * 0.8;
-  
-  const pathData = `M ${start.x} ${start.y} C ${controlX1} ${controlY1}, ${controlX2} ${controlY2}, ${end.x} ${end.y}`;
-  
-  const markerId = `arrowhead-${isActive ? 'active' : 'normal'}-${Math.random().toString(36).substr(2, 9)}`;
+  const pathData = `M ${start.x} ${start.y} Q ${controlX} ${controlY} ${end.x} ${end.y}`;
+  const markerId = `arrow-${Math.random().toString(36).substr(2, 9)}`;
   
   return (
-    <svg 
-      className={isActive ? "fixed inset-0 pointer-events-none" : "absolute inset-0 pointer-events-none"}
-      style={{
-        zIndex: isActive ? 40 : 5,
-        overflow: 'visible',
-        width: '100vw',
-        height: '100vh'
-      }}
-    >
+    <g>
       <defs>
         <marker
           id={markerId}
-          markerWidth="12"
-          markerHeight="8"
-          refX="10"
-          refY="4"
+          markerWidth="10"
+          markerHeight="10"
+          refX="8"
+          refY="3"
           orient="auto"
           markerUnits="strokeWidth"
         >
           <polygon
-            points="0 0, 12 4, 0 8"
-            fill={isActive ? "#FF6B6B" : color}
+            points="0 0, 10 3, 0 6"
+            fill={color}
           />
         </marker>
       </defs>
       <path
         d={pathData}
-        stroke={isActive ? "#FF6B6B" : color}
-        strokeWidth={isActive ? "4" : "3"}
+        stroke={color}
+        strokeWidth="3"
         fill="none"
-        strokeDasharray={isActive ? "8,4" : "none"}
         markerEnd={`url(#${markerId})`}
-        className={isActive ? "animate-pulse" : ""}
         strokeLinecap="round"
       />
-    </svg>
+    </g>
   );
 };
 
@@ -131,13 +118,13 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
         if (currentHoveredBox) {
           setHoveredBox(currentHoveredBox.id);
           
-          // When hovering over a box, snap the visual endpoint to the box center
-          const boxCenterX = rect.left + (currentHoveredBox.x + currentHoveredBox.width / 2) * scale;
-          const boxCenterY = rect.top + (currentHoveredBox.y + currentHoveredBox.height / 2) * scale;
+          // When hovering over a box, snap to the center of the box
+          const redDotCenterX = rect.left + (currentHoveredBox.x + currentHoveredBox.width / 2) * scale;
+          const redDotCenterY = rect.top + (currentHoveredBox.y + currentHoveredBox.height / 2) * scale;
           
           setMousePos({ 
-            x: boxCenterX, 
-            y: boxCenterY 
+            x: redDotCenterX, 
+            y: redDotCenterY 
           });
         } else {
           setHoveredBox(null);
@@ -195,13 +182,13 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
     if (currentHoveredBox) {
       setHoveredBox(currentHoveredBox.id);
       
-      // When hovering over a box, snap the visual endpoint to the box center
-      const boxCenterX = rect.left + (currentHoveredBox.x + currentHoveredBox.width / 2) * scale;
-      const boxCenterY = rect.top + (currentHoveredBox.y + currentHoveredBox.height / 2) * scale;
+      // When hovering over a box, snap to the center of the box
+      const redDotCenterX = rect.left + (currentHoveredBox.x + currentHoveredBox.width / 2) * scale;
+      const redDotCenterY = rect.top + (currentHoveredBox.y + currentHoveredBox.height / 2) * scale;
       
       setMousePos({ 
-        x: boxCenterX, 
-        y: boxCenterY 
+        x: redDotCenterX, 
+        y: redDotCenterY 
       });
     } else {
       setHoveredBox(null);
@@ -267,26 +254,35 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
       if (mapping.boxId) {
         const box = boxes.find(b => b.id === mapping.boxId);
         if (box && imageRef.current) {
-          // Calculate start position (from dataset preview)
+          // Calculate start position (from dataset preview column header)
           const datasetElement = document.querySelector(`[data-column="${mapping.columnId}"]`);
           if (datasetElement) {
             const datasetRect = datasetElement.getBoundingClientRect();
             const imageRect = imageRef.current.getBoundingClientRect();
             
-            // Get the grid container rect for proper positioning
-            const gridContainer = containerRef.current?.closest('.grid');
-            const gridRect = gridContainer ? gridContainer.getBoundingClientRect() : { left: 0, top: 0 };
-            
+            // Start position: center-bottom of the column header arrow icon
             const start = {
-              x: datasetRect.left + datasetRect.width / 2 - gridRect.left,
-              y: datasetRect.bottom - gridRect.top
+              x: datasetRect.left + datasetRect.width / 2,
+              y: datasetRect.bottom
             };
 
-            // Calculate end position (center of the box)
+            // End position: center of the box
             const end = {
-              x: imageRect.left - gridRect.left + (box.x + box.width / 2) * scale,
-              y: imageRect.top - gridRect.top + (box.y + box.height / 2) * scale
+              x: imageRect.left + (box.x + box.width / 2) * scale,
+              y: imageRect.top + (box.y + box.height / 2) * scale
             };
+
+            // Debug logging with clearer format
+            console.log('🎯 Connection Debug:', {
+              mapping: `${mapping.columnId} → ${mapping.boxId}`,
+              start: `(${start.x.toFixed(0)}, ${start.y.toFixed(0)})`,
+              end: `(${end.x.toFixed(0)}, ${end.y.toFixed(0)})`,
+              distance: `${Math.sqrt((end.x - start.x) ** 2 + (end.y - start.y) ** 2).toFixed(0)}px`,
+              box: `${box.x}×${box.y} (${box.width}×${box.height})`,
+              scale: scale.toFixed(2),
+              imagePos: `${imageRect.left.toFixed(0)}, ${imageRect.top.toFixed(0)}`,
+              datasetPos: `${datasetRect.left.toFixed(0)}, ${datasetRect.bottom.toFixed(0)}`
+            });
 
             connections.push({ start, end, columnId: mapping.columnId, boxId: mapping.boxId });
           }
@@ -448,17 +444,29 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
             columnMappings={columnMappings}
           />
         </div>
-
-        {/* Render connection lines */}
-        {!isDragging && getConnectionLines().map((connection, index) => (
-          <CurvedArrow
-            key={`${connection.columnId}-${connection.boxId}`}
-            start={connection.start}
-            end={connection.end}
-            color="#8B4513"
-          />
-        ))}
       </div>
+
+      {/* Render connection lines with clean arrows pointing to red dots */}
+      {!isDragging && columnMappings.length > 0 && (
+        <svg 
+          className="fixed inset-0 pointer-events-none"
+          style={{ 
+            zIndex: 5, 
+            width: '100vw', 
+            height: '100vh',
+            overflow: 'visible'
+          }}
+        >
+          {getConnectionLines().map((connection, index) => (
+            <CurvedArrow
+              key={`connection-${connection.columnId}-${connection.boxId}`}
+              start={connection.start}
+              end={connection.end}
+              color="#8B4513"
+            />
+          ))}
+        </svg>
+      )}
 
       {/* Active drag line with fun curves */}
       {draggingColumn && (

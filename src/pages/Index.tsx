@@ -84,11 +84,9 @@ const Index = () => {
         <div className="flex justify-between items-center mb-8 pb-4 border-b-4 border-double border-[#8B4513]">
           <div className="border-4 border-[#8B4513] bg-[#2C1810] px-6 py-4 shadow-[6px_6px_0_#654321]">
             <h1 className="text-4xl font-bold text-[#F5E6D3] mb-2 font-headline uppercase tracking-wider drop-shadow-[2px_2px_0_rgba(0,0,0,0.3)]">
-              ✦ CERTIFICATE PRESS ✦
+              ✦ CERTIFICATTACA ✦
             </h1>
-            <p className="text-[#DCC9B3] font-body italic text-center border-t-2 border-[#654321] pt-2">
-              Est. 1885 — Premium Document Generation
-            </p>
+            
           </div>
           <ThemeToggle />
         </div>

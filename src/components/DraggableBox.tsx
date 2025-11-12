@@ -213,10 +213,10 @@ export const DraggableBox = ({ box, onUpdate, onDelete, scale, isDraggingColumn,
           : 'border-[#8B4513] bg-[#F5E6D3]/50 cursor-move'
       }`}
       style={{
-        left: `${box.x}px`,
-        top: `${box.y}px`,
-        width: `${box.width}px`,
-        height: `${box.height}px`,
+        left: `${box.x * scale}px`,
+        top: `${box.y * scale}px`,
+        width: `${box.width * scale}px`,
+        height: `${box.height * scale}px`,
         willChange: isDragging || isResizing ? 'transform' : 'auto',
       }}
       onMouseDown={handleMouseDown}
@@ -273,10 +273,18 @@ export const DraggableBox = ({ box, onUpdate, onDelete, scale, isDraggingColumn,
         </>
       )}
       
+      {/* Red connection dot - always visible */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+        <div className={`w-3 h-3 rounded-full transition-all duration-300 ${
+          isDraggingColumn && isHovered
+            ? 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.8)] animate-pulse scale-150'
+            : 'bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.5)]'
+        }`} />
+      </div>
+      
       {isDraggingColumn && isHovered && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="w-4 h-4 rounded-full bg-[#8B4513] animate-ping" />
-          <div className="absolute w-3 h-3 rounded-full bg-[#8B4513] border-2 border-[#F5E6D3]" />
+          <div className="w-6 h-6 rounded-full bg-red-500/30 animate-ping" />
         </div>
       )}
       
