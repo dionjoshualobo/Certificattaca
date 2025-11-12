@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Plus, Download, Loader2 } from "lucide-react";
 import { DraggableBox, BoxPosition } from "./DraggableBox";
 import { DatasetPreview, ColumnMapping } from "./DatasetPreview";
+import { CertificatePreview } from "./CertificatePreview";
 import { toast } from "sonner";
 import JSZip from "jszip";
 
@@ -435,13 +436,21 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
           </div>
         </div>
 
-        <div>
+        <div className="space-y-4">
           <DatasetPreview
             columns={columns}
             rows={rows}
             onColumnDragStart={handleColumnDragStart}
             onColumnDragEnd={handleDragEnd}
             columnMappings={columnMappings}
+          />
+          
+          <CertificatePreview
+            templateUrl={templateUrl}
+            boxes={boxes}
+            columnMappings={columnMappings}
+            columns={columns}
+            firstRow={rows[0] || []}
           />
         </div>
       </div>
