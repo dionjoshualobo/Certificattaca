@@ -339,10 +339,14 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
 
   // Helper function to sanitize filename
   const sanitizeFilename = (filename: string): string => {
-    return filename
+    const sanitized = filename
       .replace(/[^a-zA-Z0-9-_ ]/g, '') // Remove special characters
       .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/^-+|-+$/g, '') // Remove leading/trailing hyphens
       .substring(0, 200); // Limit length
+    
+    // Return empty string if nothing valid remains
+    return sanitized.trim();
   };
 
   const proceedWithGeneration = async () => {
@@ -360,6 +364,8 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
         img.src = templateUrl;
       });
 
+      const usedFilenames = new Set<string>();
+      
       for (let i = 0; i < rows.length; i++) {
         const canvas = document.createElement("canvas");
         canvas.width = img.naturalWidth;
@@ -395,9 +401,24 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
         } else {
           // Use the selected column's value for naming
           const colIndex = columns.indexOf(namingOption);
-          const nameValue = rows[i][colIndex] || `certificate-${i + 1}`;
-          const sanitized = sanitizeFilename(nameValue);
-          filename = sanitized ? `${sanitized}.png` : `certificate-${i + 1}.png`;
+          if (colIndex === -1) {
+            // Column not found, fallback to default
+            filename = `certificate-${i + 1}.png`;
+          } else {
+            const nameValue = rows[i][colIndex] || `certificate-${i + 1}`;
+            const sanitized = sanitizeFilename(nameValue);
+            let baseName = sanitized || `certificate-${i + 1}`;
+            
+            // Handle duplicate filenames by adding a counter
+            let finalName = `${baseName}.png`;
+            let counter = 1;
+            while (usedFilenames.has(finalName)) {
+              finalName = `${baseName}-${counter}.png`;
+              counter++;
+            }
+            filename = finalName;
+            usedFilenames.add(filename);
+          }
         }
         
         zip.file(filename, blob);
