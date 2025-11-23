@@ -85,6 +85,19 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const [scale, setScale] = useState(1);
 
+  // Helper function to get the center of a box from the DOM
+  const getBoxCenter = (boxId: string) => {
+    const boxElement = document.querySelector(`[data-box-id="${boxId}"]`);
+    if (boxElement && imageRef.current) {
+      const boxRect = boxElement.getBoundingClientRect();
+      return {
+        x: boxRect.left + boxRect.width / 2,
+        y: boxRect.top + boxRect.height / 2
+      };
+    }
+    return null;
+  };
+
   useEffect(() => {
     const updateImageSize = () => {
       if (imageRef.current) {
@@ -119,14 +132,11 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
         if (currentHoveredBox) {
           setHoveredBox(currentHoveredBox.id);
           
-          // When hovering over a box, snap to the center of the box
-          const redDotCenterX = rect.left + (currentHoveredBox.x + currentHoveredBox.width / 2) * scale;
-          const redDotCenterY = rect.top + (currentHoveredBox.y + currentHoveredBox.height / 2) * scale;
-          
-          setMousePos({ 
-            x: redDotCenterX, 
-            y: redDotCenterY 
-          });
+          // Get the actual center position from the DOM element (where the red dot is)
+          const center = getBoxCenter(currentHoveredBox.id);
+          if (center) {
+            setMousePos(center);
+          }
         } else {
           setHoveredBox(null);
           // When not hovering over a box, follow the actual mouse position
@@ -183,14 +193,11 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
     if (currentHoveredBox) {
       setHoveredBox(currentHoveredBox.id);
       
-      // When hovering over a box, snap to the center of the box
-      const redDotCenterX = rect.left + (currentHoveredBox.x + currentHoveredBox.width / 2) * scale;
-      const redDotCenterY = rect.top + (currentHoveredBox.y + currentHoveredBox.height / 2) * scale;
-      
-      setMousePos({ 
-        x: redDotCenterX, 
-        y: redDotCenterY 
-      });
+      // Get the actual center position from the DOM element (where the red dot is)
+      const center = getBoxCenter(currentHoveredBox.id);
+      if (center) {
+        setMousePos(center);
+      }
     } else {
       setHoveredBox(null);
       // When not hovering over a box, follow the actual mouse position
@@ -267,10 +274,11 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
               y: datasetRect.bottom
             };
 
-            // End position: center of the box
-            const end = {
-              x: imageRect.left + (box.x + box.width / 2) * scale,
-              y: imageRect.top + (box.y + box.height / 2) * scale
+            // End position: get the actual center from the DOM (same as red dot)
+            const center = getBoxCenter(box.id);
+            const end = center || {
+              x: imageRect.left + (box.x * scale) + (box.width * scale / 2),
+              y: imageRect.top + (box.y * scale) + (box.height * scale / 2)
             };
 
             // Debug logging with clearer format

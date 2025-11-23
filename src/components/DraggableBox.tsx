@@ -205,6 +205,7 @@ export const DraggableBox = ({ box, onUpdate, onDelete, scale, isDraggingColumn,
   return (
     <div
       ref={boxRef}
+      data-box-id={box.id}
       className={`absolute border-2 group transition-none ${
         isDraggingColumn 
           ? isHovered
