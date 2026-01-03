@@ -6,6 +6,21 @@ import { DatasetPreview, ColumnMapping } from "./DatasetPreview";
 import { CertificatePreview } from "./CertificatePreview";
 import { toast } from "sonner";
 import JSZip from "jszip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // SVG component for curved arrows
 const CurvedArrow = ({ 
@@ -80,6 +95,8 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
   const [hoveredBox, setHoveredBox] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [showNamingDialog, setShowNamingDialog] = useState(false);
+  const [namingOption, setNamingOption] = useState<string>("default");
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
@@ -316,6 +333,24 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
       return;
     }
 
+    // Show naming dialog before generating
+    setShowNamingDialog(true);
+  };
+
+  // Helper function to sanitize filename
+  const sanitizeFilename = (filename: string): string => {
+    const sanitized = filename
+      .replace(/[^a-zA-Z0-9-_ ]/g, '') // Remove special characters
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/^-+|-+$/g, '') // Remove leading/trailing hyphens
+      .substring(0, 200); // Limit length
+    
+    // Return empty string if nothing valid remains
+    return sanitized.trim();
+  };
+
+  const proceedWithGeneration = async () => {
+    setShowNamingDialog(false);
     setIsGenerating(true);
     toast.info("Generating certificates...");
 
@@ -329,6 +364,8 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
         img.src = templateUrl;
       });
 
+      const usedFilenames = new Set<string>();
+      
       for (let i = 0; i < rows.length; i++) {
         const canvas = document.createElement("canvas");
         canvas.width = img.naturalWidth;
@@ -357,7 +394,34 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
           canvas.toBlob((b) => resolve(b!), "image/png");
         });
         
-        zip.file(`certificate-${i + 1}.png`, blob);
+        // Generate filename based on naming option
+        let filename: string;
+        if (namingOption === "default") {
+          filename = `certificate-${i + 1}.png`;
+        } else {
+          // Use the selected column's value for naming
+          const colIndex = columns.indexOf(namingOption);
+          if (colIndex === -1) {
+            // Column not found, fallback to default
+            filename = `certificate-${i + 1}.png`;
+          } else {
+            const nameValue = rows[i][colIndex] || `certificate-${i + 1}`;
+            const sanitized = sanitizeFilename(nameValue);
+            let baseName = sanitized || `certificate-${i + 1}`;
+            
+            // Handle duplicate filenames by adding a counter
+            let finalName = `${baseName}.png`;
+            let counter = 1;
+            while (usedFilenames.has(finalName)) {
+              finalName = `${baseName}-${counter}.png`;
+              counter++;
+            }
+            filename = finalName;
+            usedFilenames.add(filename);
+          }
+        }
+        
+        zip.file(filename, blob);
       }
 
       const content = await zip.generateAsync({ type: "blob" });
@@ -554,6 +618,52 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
           </div>
         </>
       )}
+
+      {/* Certificate Naming Dialog */}
+      <Dialog open={showNamingDialog} onOpenChange={setShowNamingDialog}>
+        <DialogContent className="bg-[#F5E6D3] border-4 border-[#8B4513]">
+          <DialogHeader>
+            <DialogTitle className="font-body text-[#8B4513] uppercase text-xl">
+              ✦ Certificate Naming ✦
+            </DialogTitle>
+            <DialogDescription className="text-[#4A3728] font-body">
+              Choose how you want to name your certificates
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Select value={namingOption} onValueChange={setNamingOption}>
+              <SelectTrigger className="border-2 border-[#8B4513] bg-[#F5E6D3] text-[#2C1810] font-body">
+                <SelectValue placeholder="Select naming option" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#F5E6D3] border-2 border-[#8B4513]">
+                <SelectItem value="default" className="font-body text-[#2C1810]">
+                  Default (certificate-1, certificate-2...)
+                </SelectItem>
+                {columns.map((column) => (
+                  <SelectItem key={column} value={column} className="font-body text-[#2C1810]">
+                    {column}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowNamingDialog(false)}
+              className="border-2 border-[#8B4513] text-[#8B4513] hover:bg-[#8B4513]/10 font-body uppercase"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={proceedWithGeneration}
+              className="bg-[#8B4513] hover:bg-[#654321] text-[#F5E6D3] border-2 border-[#654321] shadow-[3px_3px_0_#654321] hover:shadow-[4px_4px_0_#654321] transition-all font-bold font-body uppercase"
+            >
+              Generate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
