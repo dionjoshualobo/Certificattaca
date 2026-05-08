@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, Download, Loader2 } from "lucide-react";
+import { Plus, Download, Loader2, Image as ImageIcon, FileSpreadsheet } from "lucide-react";
 import { DraggableBox, BoxPosition } from "./DraggableBox";
 import { DatasetPreview, ColumnMapping } from "./DatasetPreview";
 import { CertificatePreview } from "./CertificatePreview";
@@ -91,9 +91,23 @@ interface WorkspaceCanvasProps {
   templateUrl: string;
   columns: string[];
   rows: string[][];
+  onTemplateUpload: (file: File) => void;
+  onDatasetUpload: (file: File) => void;
+  templateFileName?: string;
+  datasetFileName?: string;
+  onCreateNew: () => void;
 }
 
-export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasProps) => {
+export const WorkspaceCanvas = ({
+  templateUrl,
+  columns,
+  rows,
+  onTemplateUpload,
+  onDatasetUpload,
+  templateFileName,
+  datasetFileName,
+  onCreateNew,
+}: WorkspaceCanvasProps) => {
   const [boxes, setBoxes] = useState<BoxPosition[]>([]);
   const [columnMappings, setColumnMappings] = useState<ColumnMapping[]>([]);
   const [draggingColumn, setDraggingColumn] = useState<string | null>(null);
@@ -104,6 +118,7 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
   const [isDragging, setIsDragging] = useState(false);
   const [showNamingDialog, setShowNamingDialog] = useState(false);
   const [namingOption, setNamingOption] = useState<string>("default");
+  const [scrollTick, setScrollTick] = useState(0);
   const defaultFonts = [
     "Arial",
     "Times New Roman",
@@ -120,6 +135,8 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const fontInputRef = useRef<HTMLInputElement>(null);
+  const templateInputRef = useRef<HTMLInputElement>(null);
+  const datasetInputRef = useRef<HTMLInputElement>(null);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const [scale, setScale] = useState(1);
 
@@ -152,6 +169,15 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
     window.addEventListener("resize", updateImageSize);
     return () => window.removeEventListener("resize", updateImageSize);
   }, [templateUrl]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrollTick((tick) => tick + 1);
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   // Global mouse move listener for drag tracking
   useEffect(() => {
@@ -243,6 +269,18 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
       console.error(error);
       toast.error("Failed to load font file");
     }
+  };
+
+  const handleTemplateChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    onTemplateUpload(file);
+  };
+
+  const handleDatasetChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    onDatasetUpload(file);
   };
 
   const deleteBox = (id: string) => {
@@ -443,7 +481,7 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
             const text = rows[i][colIndex] || "";
 
             ctx.fillStyle = "#000000";
-            ctx.font = `${box.height * 0.6}px "${selectedFont}", Arial, sans-serif`;
+            ctx.font = `${box.height * 0.8}px "${selectedFont}", Arial, sans-serif`;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
             ctx.fillText(text, box.x + box.width / 2, box.y + box.height / 2);
@@ -523,8 +561,7 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
-                variant="outline"
-                className="border-2 border-[#8B4513] text-[#8B4513] hover:bg-[#8B4513]/10 font-body uppercase"
+                className="bg-[#8B4513] hover:bg-[#654321] text-[#F5E6D3] border-2 border-[#654321] shadow-[3px_3px_0_#654321] hover:shadow-[4px_4px_0_#654321] transition-all font-bold font-body uppercase"
               >
                 Font: {selectedFont}
               </Button>
@@ -575,6 +612,12 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
             </>
           )}
         </Button>
+        <Button
+          onClick={onCreateNew}
+          className="bg-[#2C1810] hover:bg-[#1a0f08] text-[#F5E6D3] border-2 border-[#654321] shadow-[3px_3px_0_#654321] hover:shadow-[4px_4px_0_#654321] transition-all font-bold font-body uppercase"
+        >
+          Create New
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 relative">
@@ -586,6 +629,13 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
             onMouseUp={draggingColumn ? handleDragEnd : undefined}
             style={{ cursor: draggingColumn ? "crosshair" : "default" }}
           >
+            <input
+              ref={templateInputRef}
+              type="file"
+              accept=".jpg,.jpeg,.png,.webp"
+              className="hidden"
+              onChange={handleTemplateChange}
+            />
             <img
               ref={imageRef}
               src={templateUrl}
@@ -613,9 +663,44 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
               ))}
             </div>
           </div>
+          <div className="mt-3 flex items-center gap-2">
+            <Button
+              onClick={() => templateInputRef.current?.click()}
+              className="bg-[#8B4513] hover:bg-[#654321] text-[#F5E6D3] border-2 border-[#654321] shadow-[3px_3px_0_#654321] hover:shadow-[4px_4px_0_#654321] transition-all font-bold font-body uppercase"
+            >
+              <ImageIcon className="mr-2 h-4 w-4" />
+              Change Image
+            </Button>
+            {templateFileName && (
+              <span className="text-xs text-[#8B4513] font-body truncate max-w-[220px]" title={templateFileName}>
+                {templateFileName}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <input
+              ref={datasetInputRef}
+              type="file"
+              accept=".csv,.tsv,.xlsx,.xls"
+              className="hidden"
+              onChange={handleDatasetChange}
+            />
+            <Button
+              onClick={() => datasetInputRef.current?.click()}
+              className="bg-[#8B4513] hover:bg-[#654321] text-[#F5E6D3] border-2 border-[#654321] shadow-[3px_3px_0_#654321] hover:shadow-[4px_4px_0_#654321] transition-all font-bold font-body uppercase"
+            >
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              Change Dataset
+            </Button>
+            {datasetFileName && (
+              <span className="text-xs text-[#8B4513] font-body truncate max-w-[220px]" title={datasetFileName}>
+                {datasetFileName}
+              </span>
+            )}
+          </div>
           <DatasetPreview
             columns={columns}
             rows={rows}
@@ -638,6 +723,7 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
       {/* Render connection lines with clean arrows pointing to red dots */}
       {!isDragging && columnMappings.length > 0 && (
         <svg 
+          key={`connections-${scrollTick}`}
           className="fixed inset-0 pointer-events-none"
           style={{ 
             zIndex: 5, 

@@ -102,7 +102,7 @@ export const CertificatePreview = ({
           console.log("✅ Drawing text:", text, "at box", box.id);
 
           ctx.fillStyle = "#000000";
-          ctx.font = `${box.height * 0.6}px "${fontFamily}", Arial, sans-serif`;
+          ctx.font = `${box.height * 0.8}px "${fontFamily}", Arial, sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillText(text, box.x + box.width / 2, box.y + box.height / 2);

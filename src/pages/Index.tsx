@@ -71,6 +71,14 @@ const Index = () => {
     }
   };
 
+  const handleCreateNew = () => {
+    setTemplateFile(null);
+    setTemplateUrl("");
+    setDatasetFile(null);
+    setColumns([]);
+    setRows([]);
+  };
+
   return (
     <div className="min-h-screen bg-[#F5E6D3] relative" style={{ 
       backgroundImage: `
@@ -115,7 +123,16 @@ const Index = () => {
 
         {/* Workspace */}
         {templateUrl && datasetFile && columns.length > 0 && (
-          <WorkspaceCanvas templateUrl={templateUrl} columns={columns} rows={rows} />
+          <WorkspaceCanvas
+            templateUrl={templateUrl}
+            columns={columns}
+            rows={rows}
+            onTemplateUpload={handleTemplateUpload}
+            onDatasetUpload={handleDatasetUpload}
+            templateFileName={templateFile?.name}
+            datasetFileName={datasetFile?.name}
+            onCreateNew={handleCreateNew}
+          />
         )}
 
         {/* Instructions */}
