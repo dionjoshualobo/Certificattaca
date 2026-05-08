@@ -330,22 +330,21 @@ export const WorkspaceCanvas = ({
 
   const handleDragEnd = () => {
     if (draggingColumn && hoveredBox) {
-      // Find if this column is already mapped to another box
-      const existingMapping = columnMappings.find((m) => m.columnId === draggingColumn);
-      
-      if (existingMapping) {
-        // Update existing mapping
-        setColumnMappings(
-          columnMappings.map((m) =>
-            m.columnId === draggingColumn ? { ...m, boxId: hoveredBox } : m
-          )
-        );
-      } else {
-        // Create new mapping
+      // Remove any existing mapping for this box to keep one column per box
+      const cleanedMappings = columnMappings.filter((m) => m.boxId !== hoveredBox);
+
+      // Avoid duplicate mapping for same column/box
+      const isDuplicate = cleanedMappings.some(
+        (m) => m.columnId === draggingColumn && m.boxId === hoveredBox
+      );
+
+      if (!isDuplicate) {
         setColumnMappings([
-          ...columnMappings,
+          ...cleanedMappings,
           { columnId: draggingColumn, boxId: hoveredBox },
         ]);
+      } else {
+        setColumnMappings(cleanedMappings);
       }
 
       // Update the box to show which column it's mapped to
@@ -361,6 +360,19 @@ export const WorkspaceCanvas = ({
     setDraggingColumn(null);
     setHoveredBox(null);
     setIsDragging(false);
+  };
+
+  const handleRemoveMapping = (columnId: string, boxId: string) => {
+    setColumnMappings(
+      columnMappings.filter(
+        (mapping) => !(mapping.columnId === columnId && mapping.boxId === boxId)
+      )
+    );
+    setBoxes(
+      boxes.map((box) =>
+        box.id === boxId ? { ...box, columnId: undefined } : box
+      )
+    );
   };
 
   const resetBoxesAndMappings = () => {
@@ -718,6 +730,7 @@ export const WorkspaceCanvas = ({
             onColumnDragStart={handleColumnDragStart}
             onColumnDragEnd={handleDragEnd}
             columnMappings={columnMappings}
+            onRemoveMapping={handleRemoveMapping}
           />
           
           <CertificatePreview

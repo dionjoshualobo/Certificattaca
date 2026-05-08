@@ -222,6 +222,9 @@ export const DraggableBox = ({ box, onUpdate, onDelete, scale, isDraggingColumn,
       }}
       onMouseDown={handleMouseDown}
     >
+      <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] px-2 py-0.5 bg-[#8B4513] text-[#F5E6D3] border-2 border-[#654321] shadow-[2px_2px_0_#654321] font-body uppercase">
+        {box.id}
+      </div>
       {!isDraggingColumn && (
         <Button
           variant="destructive"

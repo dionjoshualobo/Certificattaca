@@ -1,6 +1,13 @@
 import { Card } from "@/components/ui/card";
-import { TrendingUp, Zap, Star } from "lucide-react";
+import { TrendingUp, Zap, Star, ChevronDown, X } from "lucide-react";
 import { useState, useRef } from "react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export interface ColumnMapping {
   columnId: string;
@@ -13,6 +20,7 @@ interface DatasetPreviewProps {
   onColumnDragStart: (columnId: string, startPos: { x: number; y: number }) => void;
   onColumnDragEnd: () => void;
   columnMappings: ColumnMapping[];
+  onRemoveMapping: (columnId: string, boxId: string) => void;
 }
 
 export const DatasetPreview = ({
@@ -21,6 +29,7 @@ export const DatasetPreview = ({
   onColumnDragStart,
   onColumnDragEnd,
   columnMappings,
+  onRemoveMapping,
 }: DatasetPreviewProps) => {
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
   const dragStartPos = useRef({ x: 0, y: 0 });
@@ -41,8 +50,11 @@ export const DatasetPreview = ({
     onColumnDragEnd();
   };
 
-  const getBoxIdForColumn = (columnId: string) => {
-    return columnMappings.find((m) => m.columnId === columnId)?.boxId;
+  const getBoxIdsForColumn = (columnId: string) => {
+    return columnMappings
+      .filter((m) => m.columnId === columnId)
+      .map((m) => m.boxId)
+      .filter((boxId): boxId is string => !!boxId);
   };
 
   // Fun arrow icons that rotate
@@ -62,7 +74,8 @@ export const DatasetPreview = ({
             <tr className="border-b-4 border-double border-[#8B4513]">
               {columns.map((col, idx) => {
                 const ArrowIcon = ArrowIcons[idx % ArrowIcons.length];
-                const isConnected = getBoxIdForColumn(col);
+                const mappedBoxes = getBoxIdsForColumn(col);
+                const isConnected = mappedBoxes.length > 0;
                 
                 return (
                   <th
@@ -79,7 +92,7 @@ export const DatasetPreview = ({
                         onMouseDown={handleDragStart(col)}
                         onMouseUp={handleDragEnd}
                         data-column={col}
-                        title={isConnected ? `Connected to ${isConnected}` : 'Drag to connect'}
+                        title={isConnected ? `Connected to ${mappedBoxes.join(", ")}` : 'Drag to connect'}
                       >
                         <ArrowIcon className={`h-4 w-4 text-[#8B4513] transition-all duration-300 ${
                           isConnected ? 'text-green-600 scale-110' : 'animate-bounce'
@@ -87,9 +100,39 @@ export const DatasetPreview = ({
                       </div>
                       <span className="text-[#2C1810] font-body font-bold uppercase tracking-wide">{col}</span>
                       {isConnected && (
-                        <span className="text-xs text-green-600 font-mono bg-green-100 px-2 py-1 border border-green-500 rounded-full animate-pulse">
-                          → {isConnected}
-                        </span>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="flex items-center gap-1 text-xs text-green-700 font-mono bg-green-100 px-2 py-1 border border-green-500 rounded-full">
+                              {mappedBoxes.length} mapped
+                              <ChevronDown className="h-3 w-3" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent className="bg-[#F5E6D3] border-2 border-[#8B4513]">
+                            <DropdownMenuItem className="font-body text-[#2C1810]" onSelect={(e) => e.preventDefault()}>
+                              Mapped boxes
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator className="bg-[#8B4513]/30" />
+                            {mappedBoxes.map((boxId) => (
+                              <DropdownMenuItem
+                                key={`${col}-${boxId}`}
+                                className="flex items-center justify-between gap-3 font-body text-[#2C1810]"
+                                onSelect={(e) => e.preventDefault()}
+                              >
+                                <span>{boxId}</span>
+                                <button
+                                  className="text-[#8B4513] hover:text-[#654321]"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onRemoveMapping(col, boxId);
+                                  }}
+                                  aria-label={`Remove mapping ${col} to ${boxId}`}
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
                     </div>
                   </th>
