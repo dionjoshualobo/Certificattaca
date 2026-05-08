@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, Download, Loader2, Image as ImageIcon, FileSpreadsheet } from "lucide-react";
+import { Plus, Download, Loader2, Image as ImageIcon, FileSpreadsheet, ChevronDown } from "lucide-react";
 import { DraggableBox, BoxPosition } from "./DraggableBox";
 import { DatasetPreview, ColumnMapping } from "./DatasetPreview";
 import { CertificatePreview } from "./CertificatePreview";
@@ -618,23 +618,65 @@ export const WorkspaceCanvas = ({
         >
           Reset Boxes
         </Button>
-        <Button
-          onClick={generateCertificates}
-          disabled={isGenerating || boxes.length === 0}
-          className="bg-[#2C1810] hover:bg-[#1a0f08] text-[#F5E6D3] border-2 border-[#654321] shadow-[3px_3px_0_#654321] hover:shadow-[4px_4px_0_#654321] transition-all font-bold font-body uppercase disabled:opacity-50"
-        >
-          {isGenerating ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Generating...
-            </>
-          ) : (
-            <>
-              <Download className="mr-2 h-4 w-4" />
-              Generate Certificates
-            </>
-          )}
-        </Button>
+        <div className="flex">
+          <Button
+            onClick={generateCertificates}
+            disabled={isGenerating || boxes.length === 0}
+            className="bg-[#2C1810] hover:bg-[#1a0f08] text-[#F5E6D3] border-2 border-[#654321] shadow-[3px_3px_0_#654321] hover:shadow-[4px_4px_0_#654321] transition-all font-bold font-body uppercase disabled:opacity-50 rounded-r-none"
+          >
+            {isGenerating ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Download className="mr-2 h-4 w-4" />
+                Generate Certificates
+              </>
+            )}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                disabled={isGenerating || boxes.length === 0}
+                className="bg-[#2C1810] hover:bg-[#1a0f08] text-[#F5E6D3] border-2 border-l-0 border-[#654321] shadow-[3px_3px_0_#654321] hover:shadow-[4px_4px_0_#654321] transition-all font-bold font-body uppercase disabled:opacity-50 rounded-l-none px-3"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="bg-[#F5E6D3] border-2 border-[#8B4513]">
+              <DropdownMenuItem
+                className="font-body text-[#2C1810] cursor-pointer"
+                onSelect={(event) => {
+                  event.preventDefault();
+                  generateCertificates();
+                }}
+              >
+                Local, Zip
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-[#8B4513]/30" />
+              <DropdownMenuItem
+                className="font-body text-[#2C1810] cursor-pointer"
+                onSelect={(event) => {
+                  event.preventDefault();
+                  toast.info("Google Drive folder export is WIP");
+                }}
+              >
+                GDrive, Folder (WIP)
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="font-body text-[#2C1810] cursor-pointer"
+                onSelect={(event) => {
+                  event.preventDefault();
+                  toast.info("Google Drive zip export is WIP");
+                }}
+              >
+                GDrive, Zip (WIP)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
         <Button
           onClick={() => setShowCreateNewDialog(true)}
           className="bg-[#2C1810] hover:bg-[#1a0f08] text-[#F5E6D3] border-2 border-[#654321] shadow-[3px_3px_0_#654321] hover:shadow-[4px_4px_0_#654321] transition-all font-bold font-body uppercase"
