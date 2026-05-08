@@ -28,9 +28,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import {
   ensureDriveAccessToken,
+  createDriveFolder,
+  type DriveFolder,
   pickDriveFolder,
+  uploadFileToDrive,
   uploadFolderToDrive,
   uploadZipToDrive,
 } from "@/lib/googleDrive";
@@ -104,6 +108,9 @@ interface WorkspaceCanvasProps {
   onCreateNew: () => void;
 }
 
+const DRIVE_ROOT_FOLDER: DriveFolder = { name: "My Drive root" };
+const DEFAULT_ZIP_FILE_NAME = "certificates.zip";
+
 export const WorkspaceCanvas = ({
   templateUrl,
   columns,
@@ -128,8 +135,12 @@ export const WorkspaceCanvas = ({
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [showCreateNewDialog, setShowCreateNewDialog] = useState(false);
   const [exportTarget, setExportTarget] = useState<"local-zip" | "drive-zip" | "drive-folder" | null>(null);
-  const [selectedDriveFolder, setSelectedDriveFolder] = useState<{ id: string; name: string } | null>(null);
+  const [selectedDriveFolder, setSelectedDriveFolder] = useState<DriveFolder | null>(null);
   const [isPickingDriveFolder, setIsPickingDriveFolder] = useState(false);
+  const [newDriveFolderName, setNewDriveFolderName] = useState("");
+  const [rootDriveFolderName, setRootDriveFolderName] = useState("");
+  const [driveZipFileName, setDriveZipFileName] = useState(DEFAULT_ZIP_FILE_NAME);
+  const [isCreatingDriveFolder, setIsCreatingDriveFolder] = useState(false);
   const defaultFonts = [
     "Arial",
     "Helvetica",
@@ -146,6 +157,7 @@ export const WorkspaceCanvas = ({
   const fontInputRef = useRef<HTMLInputElement>(null);
   const templateInputRef = useRef<HTMLInputElement>(null);
   const datasetInputRef = useRef<HTMLInputElement>(null);
+  const drivePickerActiveRef = useRef(false);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const [scale, setScale] = useState(1);
 
@@ -460,6 +472,11 @@ export const WorkspaceCanvas = ({
     }
 
     setExportTarget(target);
+    setSelectedDriveFolder(null);
+    setNewDriveFolderName("");
+    setRootDriveFolderName("");
+    setDriveZipFileName(DEFAULT_ZIP_FILE_NAME);
+
     // Show naming dialog before generating
     setShowNamingDialog(true);
   };
@@ -474,6 +491,21 @@ export const WorkspaceCanvas = ({
     
     // Return empty string if nothing valid remains
     return sanitized.trim();
+  };
+
+  const normalizeZipFilename = (filename: string): string => {
+    const rawName = filename.trim() || DEFAULT_ZIP_FILE_NAME;
+    const nameWithoutExtension = rawName.toLowerCase().endsWith(".zip")
+      ? rawName.slice(0, -4)
+      : rawName;
+    const safeBaseName = nameWithoutExtension
+      .replace(/[\\/:*?"<>|]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .substring(0, 200)
+      .trim();
+
+    return `${safeBaseName || "certificates"}.zip`;
   };
 
   const generateCertificateBlobs = async () => {
@@ -577,7 +609,7 @@ export const WorkspaceCanvas = ({
     }
   };
 
-  const handleDriveZip = async () => {
+  const handleDriveZip = async (parentId: string | undefined, fileName: string) => {
     setIsGenerating(true);
     toast.info("Uploading ZIP to Google Drive...");
     try {
@@ -590,7 +622,8 @@ export const WorkspaceCanvas = ({
       });
 
       const zipBlob = await zip.generateAsync({ type: "blob" });
-      await uploadZipToDrive(accessToken, "certificates.zip", zipBlob, selectedDriveFolder?.id);
+      await uploadZipToDrive(accessToken, fileName, zipBlob, parentId);
+      setDriveZipFileName(fileName);
       toast.success("ZIP uploaded to Google Drive");
     } catch (error) {
       console.error(error);
@@ -600,19 +633,31 @@ export const WorkspaceCanvas = ({
     }
   };
 
-  const handleDriveFolder = async () => {
+  const handleDriveFolder = async (parentId: string | undefined, folderName: string) => {
     setIsGenerating(true);
     toast.info("Uploading certificates to Google Drive...");
     try {
       const accessToken = await ensureDriveAccessToken();
       const files = await generateCertificateBlobs();
-      const folderName = `certificates-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}`;
-      await uploadFolderToDrive(
-        accessToken,
-        folderName,
-        files.map((file) => ({ name: file.filename, blob: file.blob })),
-        selectedDriveFolder?.id
-      );
+
+      if (folderName) {
+        await uploadFolderToDrive(
+          accessToken,
+          folderName,
+          files.map((file) => ({ name: file.filename, blob: file.blob })),
+          parentId
+        );
+      } else {
+        for (const file of files) {
+          await uploadFileToDrive(accessToken, {
+            name: file.filename,
+            mimeType: "image/png",
+            data: file.blob,
+            parentId,
+          });
+        }
+      }
+      setNewDriveFolderName("");
       toast.success("Certificates uploaded to Google Drive");
     } catch (error) {
       console.error(error);
@@ -623,8 +668,11 @@ export const WorkspaceCanvas = ({
   };
 
   const handlePickDriveFolder = async () => {
+    drivePickerActiveRef.current = true;
+    setShowNamingDialog(false);
     setIsPickingDriveFolder(true);
     try {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
       const accessToken = await ensureDriveAccessToken();
       const folder = await pickDriveFolder(accessToken);
       setSelectedDriveFolder(folder);
@@ -635,26 +683,63 @@ export const WorkspaceCanvas = ({
       console.error(error);
       toast.error("Failed to select a Drive folder");
     } finally {
+      drivePickerActiveRef.current = false;
       setIsPickingDriveFolder(false);
+      setShowNamingDialog(true);
+    }
+  };
+
+  const handleCreateDriveFolder = async () => {
+    const folderName = rootDriveFolderName.trim();
+    if (!folderName) {
+      toast.error("Enter a folder name");
+      return;
+    }
+    if (!selectedDriveFolder) {
+      toast.error("Choose a parent folder or use My Drive root first");
+      return;
+    }
+    setIsCreatingDriveFolder(true);
+    try {
+      const accessToken = await ensureDriveAccessToken();
+      const folder = await createDriveFolder(accessToken, folderName, selectedDriveFolder.id);
+      setSelectedDriveFolder(folder);
+      setRootDriveFolderName("");
+      toast.success("Drive folder created");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to create Drive folder");
+    } finally {
+      setIsCreatingDriveFolder(false);
     }
   };
 
   const handleExportConfirm = async () => {
     if (!exportTarget) return;
-    if (exportTarget !== "local-zip" && !selectedDriveFolder) {
-      toast.error("Please choose a Google Drive folder");
-      return;
-    }
     if (exportTarget === "local-zip") {
       await proceedWithGeneration();
       return;
     }
-    setShowNamingDialog(false);
-    if (exportTarget === "drive-zip") {
-      await handleDriveZip();
+    if (!selectedDriveFolder) {
+      toast.error("Please choose a Google Drive folder");
       return;
     }
-    await handleDriveFolder();
+    const destinationFolder = selectedDriveFolder;
+    const certificateFolderName = newDriveFolderName.trim();
+    const zipFileName = normalizeZipFilename(driveZipFileName);
+    setShowNamingDialog(false);
+    if (exportTarget === "drive-zip") {
+      await handleDriveZip(destinationFolder.id, zipFileName);
+      return;
+    }
+    await handleDriveFolder(destinationFolder.id, certificateFolderName);
+  };
+
+  const handleNamingDialogOpenChange = (open: boolean) => {
+    if (!open && drivePickerActiveRef.current) {
+      return;
+    }
+    setShowNamingDialog(open);
   };
 
   return (
@@ -977,7 +1062,7 @@ export const WorkspaceCanvas = ({
       )}
 
       {/* Certificate Naming Dialog */}
-      <Dialog open={showNamingDialog} onOpenChange={setShowNamingDialog}>
+      <Dialog open={showNamingDialog} onOpenChange={handleNamingDialogOpenChange}>
         <DialogContent className="bg-[#F5E6D3] border-4 border-[#8B4513]">
           <DialogHeader>
             <DialogTitle className="font-body text-[#8B4513] uppercase text-xl">
@@ -1004,23 +1089,77 @@ export const WorkspaceCanvas = ({
               </SelectContent>
             </Select>
             {exportTarget && exportTarget !== "local-zip" && (
-              <div className="mt-4 space-y-2">
-                <p className="text-sm text-[#4A3728] font-body">
-                  Choose a Drive folder to save the export
-                </p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={handlePickDriveFolder}
-                    disabled={isPickingDriveFolder}
-                    className="border-2 border-[#8B4513] text-[#8B4513] hover:bg-[#8B4513]/10 font-body uppercase"
-                  >
-                    {isPickingDriveFolder ? "Opening..." : "Choose Folder"}
-                  </Button>
-                  <span className="text-xs text-[#8B4513] font-body truncate max-w-[220px]">
-                    {selectedDriveFolder ? selectedDriveFolder.name : "No folder selected"}
-                  </span>
+              <div className="mt-4 space-y-3">
+                <div className="space-y-2 border-2 border-[#8B4513]/40 p-3">
+                  <p className="text-sm text-[#4A3728] font-body">
+                    Drive destination
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={handlePickDriveFolder}
+                      disabled={isPickingDriveFolder}
+                      className="border-2 border-[#8B4513] text-[#8B4513] hover:bg-[#8B4513]/10 font-body uppercase"
+                    >
+                      {isPickingDriveFolder ? "Opening..." : "Choose Folder"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setSelectedDriveFolder(DRIVE_ROOT_FOLDER)}
+                      className="border-2 border-[#8B4513] text-[#8B4513] hover:bg-[#8B4513]/10 font-body uppercase"
+                    >
+                      Use My Drive Root
+                    </Button>
+                    <span className="text-xs text-[#8B4513] font-body truncate max-w-[240px]">
+                      {selectedDriveFolder ? selectedDriveFolder.name : "No folder selected"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#4A3728] font-body pt-1">
+                    Create a folder inside the selected destination, then use that new folder.
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      value={rootDriveFolderName}
+                      onChange={(event) => setRootDriveFolderName(event.target.value)}
+                      placeholder="New destination folder name"
+                      className="border-2 border-[#8B4513] bg-[#F5E6D3] text-[#2C1810] font-body"
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={handleCreateDriveFolder}
+                      disabled={isCreatingDriveFolder || !selectedDriveFolder}
+                      className="border-2 border-[#8B4513] text-[#8B4513] hover:bg-[#8B4513]/10 font-body uppercase sm:min-w-[104px]"
+                    >
+                      {isCreatingDriveFolder ? "Creating..." : "Create"}
+                    </Button>
+                  </div>
                 </div>
+                {exportTarget === "drive-folder" && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-[#4A3728] font-body">
+                      Folder to contain certificates. Leave empty to save images directly in the destination.
+                    </p>
+                    <Input
+                      value={newDriveFolderName}
+                      onChange={(event) => setNewDriveFolderName(event.target.value)}
+                      placeholder="Certificate folder name (optional)"
+                      className="border-2 border-[#8B4513] bg-[#F5E6D3] text-[#2C1810] font-body"
+                    />
+                  </div>
+                )}
+                {exportTarget === "drive-zip" && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-[#4A3728] font-body">
+                      Name of the ZIP file. The .zip extension will be added if needed.
+                    </p>
+                    <Input
+                      value={driveZipFileName}
+                      onChange={(event) => setDriveZipFileName(event.target.value)}
+                      placeholder={DEFAULT_ZIP_FILE_NAME}
+                      className="border-2 border-[#8B4513] bg-[#F5E6D3] text-[#2C1810] font-body"
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1034,6 +1173,7 @@ export const WorkspaceCanvas = ({
             </Button>
             <Button
               onClick={handleExportConfirm}
+              disabled={isGenerating || isPickingDriveFolder || isCreatingDriveFolder}
               className="bg-[#8B4513] hover:bg-[#654321] text-[#F5E6D3] border-2 border-[#654321] shadow-[3px_3px_0_#654321] hover:shadow-[4px_4px_0_#654321] transition-all font-bold font-body uppercase"
             >
               Generate

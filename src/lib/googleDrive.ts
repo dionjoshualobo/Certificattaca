@@ -6,6 +6,41 @@ interface StoredToken {
   expiresAt: number;
 }
 
+export interface DriveFolder {
+  id?: string;
+  name: string;
+}
+
+interface PickerDocument {
+  id?: string;
+  name?: string;
+}
+
+interface PickerResponse {
+  action?: string;
+  docs?: PickerDocument[];
+}
+
+interface PickerInstance {
+  setVisible: (visible: boolean) => void;
+}
+
+interface PickerDocsView {
+  setSelectFolderEnabled: (enabled: boolean) => PickerDocsView;
+  setIncludeFolders: (enabled: boolean) => PickerDocsView;
+  setOwnedByMe: (owned: boolean) => PickerDocsView;
+  setParent: (parentId: string) => PickerDocsView;
+}
+
+interface PickerBuilderInstance {
+  addView: (view: PickerDocsView) => PickerBuilderInstance;
+  setOAuthToken: (token: string) => PickerBuilderInstance;
+  setDeveloperKey: (key: string) => PickerBuilderInstance;
+  setTitle: (title: string) => PickerBuilderInstance;
+  setCallback: (callback: (data: PickerResponse) => void) => PickerBuilderInstance;
+  build: () => PickerInstance;
+}
+
 declare global {
   interface Window {
     google?: {
@@ -22,17 +57,8 @@ declare global {
         Action: { PICKED: string; CANCEL: string };
         Feature: { NAV_HIDDEN: string };
         ViewId: { FOLDERS: string };
-        DocsView: new (viewId: string) => {
-          setSelectFolderEnabled: (enabled: boolean) => any;
-        };
-        PickerBuilder: new () => {
-          addView: (view: any) => any;
-          setOAuthToken: (token: string) => any;
-          setDeveloperKey: (key: string) => any;
-          setCallback: (callback: (data: any) => void) => any;
-          enableFeature: (feature: string) => any;
-          build: () => { setVisible: (visible: boolean) => void };
-        };
+        DocsView: new (viewId: string) => PickerDocsView;
+        PickerBuilder: new () => PickerBuilderInstance;
       };
     };
     gapi?: {
@@ -200,6 +226,15 @@ const createFolder = async (accessToken: string, name: string, parentId?: string
   return data.id;
 };
 
+export const createDriveFolder = async (
+  accessToken: string,
+  name: string,
+  parentId?: string
+): Promise<DriveFolder> => {
+  const id = await createFolder(accessToken, name, parentId);
+  return { id, name };
+};
+
 const uploadMultipartFile = async (
   accessToken: string,
   params: { name: string; mimeType: string; data: Blob; parentId?: string }
@@ -239,6 +274,13 @@ const uploadMultipartFile = async (
   }
 };
 
+export const uploadFileToDrive = async (
+  accessToken: string,
+  params: { name: string; mimeType: string; data: Blob; parentId?: string }
+) => {
+  await uploadMultipartFile(accessToken, params);
+};
+
 export const uploadZipToDrive = async (
   accessToken: string,
   fileName: string,
@@ -270,21 +312,25 @@ export const uploadFolderToDrive = async (
   }
 };
 
-export const pickDriveFolder = async (accessToken: string) => {
+export const pickDriveFolder = async (accessToken: string): Promise<DriveFolder> => {
   await ensurePickerReady();
   const apiKey = getApiKey();
 
-  return new Promise<{ id: string; name: string }>((resolve, reject) => {
+  return new Promise<DriveFolder>((resolve, reject) => {
     const view = new window.google!.picker!.DocsView(
       window.google!.picker!.ViewId.FOLDERS
-    ).setSelectFolderEnabled(true);
+    )
+      .setParent("root")
+      .setSelectFolderEnabled(true)
+      .setIncludeFolders(true)
+      .setOwnedByMe(true);
 
     const picker = new window.google!.picker!.PickerBuilder()
       .addView(view)
       .setOAuthToken(accessToken)
       .setDeveloperKey(apiKey)
-      .enableFeature(window.google!.picker!.Feature.NAV_HIDDEN)
-      .setCallback((data: any) => {
+      .setTitle("Select a Drive folder")
+      .setCallback((data) => {
         if (data.action === window.google!.picker!.Action.PICKED) {
           const doc = data.docs?.[0];
           if (!doc?.id) {
