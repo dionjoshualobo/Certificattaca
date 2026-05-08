@@ -28,6 +28,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  ensureDriveAccessToken,
+  uploadFolderToDrive,
+  uploadZipToDrive,
+} from "@/lib/googleDrive";
 
 // SVG component for curved arrows
 const CurvedArrow = ({ 
@@ -466,6 +471,77 @@ export const WorkspaceCanvas = ({
     return sanitized.trim();
   };
 
+  const generateCertificateBlobs = async () => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = templateUrl;
+    });
+
+    await ensureFontLoaded(selectedFont);
+
+    const usedFilenames = new Set<string>();
+    const results: Array<{ filename: string; blob: Blob }> = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+
+      if (!ctx) continue;
+
+      ctx.drawImage(img, 0, 0);
+
+      boxes.forEach((box) => {
+        const mapping = columnMappings.find((m) => m.boxId === box.id);
+        if (mapping) {
+          const colIndex = columns.indexOf(mapping.columnId);
+          const text = rows[i][colIndex] || "";
+
+          ctx.fillStyle = "#000000";
+          ctx.font = `${box.height * 0.9}px "${selectedFont}", Arial, sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(text, box.x + box.width / 2, box.y + box.height / 2);
+        }
+      });
+
+      const blob = await new Promise<Blob>((resolve) => {
+        canvas.toBlob((b) => resolve(b!), "image/png");
+      });
+
+      let filename: string;
+      if (namingOption === "default") {
+        filename = `certificate-${i + 1}.png`;
+      } else {
+        const colIndex = columns.indexOf(namingOption);
+        if (colIndex === -1) {
+          filename = `certificate-${i + 1}.png`;
+        } else {
+          const nameValue = rows[i][colIndex] || `certificate-${i + 1}`;
+          const sanitized = sanitizeFilename(nameValue);
+          const baseName = sanitized || `certificate-${i + 1}`;
+
+          let finalName = `${baseName}.png`;
+          let counter = 1;
+          while (usedFilenames.has(finalName)) {
+            finalName = `${baseName}-${counter}.png`;
+            counter++;
+          }
+          filename = finalName;
+          usedFilenames.add(filename);
+        }
+      }
+
+      results.push({ filename, blob });
+    }
+
+    return results;
+  };
+
   const proceedWithGeneration = async () => {
     setShowNamingDialog(false);
     setIsGenerating(true);
@@ -473,75 +549,11 @@ export const WorkspaceCanvas = ({
 
     try {
       const zip = new JSZip();
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
-        img.src = templateUrl;
+      const files = await generateCertificateBlobs();
+
+      files.forEach((file) => {
+        zip.file(file.filename, file.blob);
       });
-
-      await ensureFontLoaded(selectedFont);
-
-      const usedFilenames = new Set<string>();
-      
-      for (let i = 0; i < rows.length; i++) {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const ctx = canvas.getContext("2d");
-        
-        if (!ctx) continue;
-
-        ctx.drawImage(img, 0, 0);
-
-        boxes.forEach((box) => {
-          const mapping = columnMappings.find((m) => m.boxId === box.id);
-          if (mapping) {
-            const colIndex = columns.indexOf(mapping.columnId);
-            const text = rows[i][colIndex] || "";
-
-            ctx.fillStyle = "#000000";
-            ctx.font = `${box.height * 0.9}px "${selectedFont}", Arial, sans-serif`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(text, box.x + box.width / 2, box.y + box.height / 2);
-          }
-        });
-
-        const blob = await new Promise<Blob>((resolve) => {
-          canvas.toBlob((b) => resolve(b!), "image/png");
-        });
-        
-        // Generate filename based on naming option
-        let filename: string;
-        if (namingOption === "default") {
-          filename = `certificate-${i + 1}.png`;
-        } else {
-          // Use the selected column's value for naming
-          const colIndex = columns.indexOf(namingOption);
-          if (colIndex === -1) {
-            // Column not found, fallback to default
-            filename = `certificate-${i + 1}.png`;
-          } else {
-            const nameValue = rows[i][colIndex] || `certificate-${i + 1}`;
-            const sanitized = sanitizeFilename(nameValue);
-            const baseName = sanitized || `certificate-${i + 1}`;
-            
-            // Handle duplicate filenames by adding a counter
-            let finalName = `${baseName}.png`;
-            let counter = 1;
-            while (usedFilenames.has(finalName)) {
-              finalName = `${baseName}-${counter}.png`;
-              counter++;
-            }
-            filename = finalName;
-            usedFilenames.add(filename);
-          }
-        }
-        
-        zip.file(filename, blob);
-      }
 
       const content = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(content);
@@ -555,6 +567,46 @@ export const WorkspaceCanvas = ({
     } catch (error) {
       console.error(error);
       toast.error("Failed to generate certificates");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleDriveZip = async () => {
+    setIsGenerating(true);
+    toast.info("Uploading ZIP to Google Drive...");
+    try {
+      const accessToken = await ensureDriveAccessToken();
+      const files = await generateCertificateBlobs();
+      const zip = new JSZip();
+
+      files.forEach((file) => {
+        zip.file(file.filename, file.blob);
+      });
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      await uploadZipToDrive(accessToken, "certificates.zip", zipBlob);
+      toast.success("ZIP uploaded to Google Drive");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to upload ZIP to Google Drive");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleDriveFolder = async () => {
+    setIsGenerating(true);
+    toast.info("Uploading certificates to Google Drive...");
+    try {
+      const accessToken = await ensureDriveAccessToken();
+      const files = await generateCertificateBlobs();
+      const folderName = `certificates-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}`;
+      await uploadFolderToDrive(accessToken, folderName, files.map((file) => ({ name: file.filename, blob: file.blob })));
+      toast.success("Certificates uploaded to Google Drive");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to upload certificates to Google Drive");
     } finally {
       setIsGenerating(false);
     }
@@ -660,19 +712,19 @@ export const WorkspaceCanvas = ({
                 className="font-body text-[#2C1810] cursor-pointer"
                 onSelect={(event) => {
                   event.preventDefault();
-                  toast.info("Google Drive folder export is WIP");
+                  handleDriveFolder();
                 }}
               >
-                GDrive, Folder (WIP)
+                GDrive, Folder
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="font-body text-[#2C1810] cursor-pointer"
                 onSelect={(event) => {
                   event.preventDefault();
-                  toast.info("Google Drive zip export is WIP");
+                  handleDriveZip();
                 }}
               >
-                GDrive, Zip (WIP)
+                GDrive, Zip
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
