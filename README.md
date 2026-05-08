@@ -1,73 +1,54 @@
-# Welcome to your Lovable project
+# Certificattaca
 
-## Project info
+Simple certificate generator UI (React + Vite + TypeScript).
 
-**URL**: https://lovable.dev/projects/89703296-137c-4bbb-8fe6-0ff3d4e0d981
+## Quick start
 
-## How can I edit this code?
+### Option 1: Using Docker (Easiest for sharing)
 
-There are several ways of editing your application.
+```bash
+docker compose up --build
+```
 
-**Use Lovable**
+Open http://localhost:3000 — no dependencies needed, works on any machine with Docker installed.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/89703296-137c-4bbb-8fe6-0ff3d4e0d981) and start prompting.
+### Option 2: Local development
 
-Changes made via Lovable will be committed automatically to this repo.
+Requirements: Node.js (16+) and npm.
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```bash
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Open http://localhost:5173 — Vite will hot-reload changes in `src/`.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Basic usage
 
-**Use GitHub Codespaces**
+- Add text boxes using the `Add Text Box` button.
+- Map columns from the dataset preview to boxes by dragging or dropping.
+- Once you have at least one mapping, open the `Output Preview` panel and click `Show Preview` to render a sample using the first row.
+- Click the preview to maximize it. When ready, click `Generate Certificates` to download a ZIP of generated PNGs.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Key files
 
-## What technologies are used for this project?
+- `src/components/WorkspaceCanvas.tsx` — main canvas: renders template image, boxes, arrows and mapping logic.
+- `src/components/DraggableBox.tsx` — draggable boxes and the red target dot.
+- `src/components/CertificatePreview.tsx` — generates the sample output image and preview dialog.
+- `src/components/DatasetPreview.tsx` — dataset table and column drag source.
 
-This project is built with:
+## Troubleshooting
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+- If preview doesn't appear, open the browser console (F12 → Console) and look for preview logs/errors.
+- If arrows or dots are misaligned after editing boxes, ensure the template image has finished loading; `WorkspaceCanvas` uses a `scale` value based on the image's displayed width.
 
-## How can I deploy this project?
+## Build for production
 
-Simply open [Lovable](https://lovable.dev/projects/89703296-137c-4bbb-8fe6-0ff3d4e0d981) and click on Share -> Publish.
+```bash
+npm run build
+npm run preview
+```
 
-## Can I connect a custom domain to my Lovable project?
+## License
 
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+MIT (update as needed).
