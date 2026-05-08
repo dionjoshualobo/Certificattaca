@@ -126,9 +126,6 @@ export const WorkspaceCanvas = ({
     "Helvetica",
     "Times New Roman",
     "Georgia",
-    "Verdana",
-    "Tahoma",
-    "Trebuchet MS",
     "Courier New",
   ];
   const [fontOptions, setFontOptions] = useState<string[]>(defaultFonts);
@@ -493,7 +490,7 @@ export const WorkspaceCanvas = ({
             const text = rows[i][colIndex] || "";
 
             ctx.fillStyle = "#000000";
-            ctx.font = `${box.height * 0.8}px "${selectedFont}", Arial, sans-serif`;
+            ctx.font = `${box.height * 0.9}px "${selectedFont}", Arial, sans-serif`;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
             ctx.fillText(text, box.x + box.width / 2, box.y + box.height / 2);
