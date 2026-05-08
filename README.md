@@ -1,81 +1,152 @@
 # Certificattaca
 
-Simple certificate generator UI (React + Vite + TypeScript).
+Simple certificate generator UI built with React, Vite, and TypeScript.
 
-## Quick start
+## Working Locally
 
-### Option 1: Using Docker (Easiest for sharing)
+Requirements:
+
+- Node.js 20+ recommended
+- npm
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Optional, for Google Drive export:
+
+```bash
+cp .env.example .env
+```
+
+Fill these values in `.env` only if you want Drive upload support:
+
+```bash
+VITE_GOOGLE_CLIENT_ID=your-google-oauth-client-id.apps.googleusercontent.com
+VITE_GOOGLE_API_KEY=your-google-api-key
+```
+
+Start the dev server:
+
+```bash
+npm run dev
+```
+
+Open http://localhost:8080.
+
+## Working With Docker
+
+Docker builds the static Vite app and serves it on port `3000`.
 
 ```bash
 docker compose up --build
 ```
 
-Open http://localhost:3000 — no dependencies needed, works on any machine with Docker installed.
+Open http://localhost:3000.
 
-### Option 2: Local development
-
-Requirements: Node.js (16+) and npm.
+If Google Drive export is enabled, Docker Compose reads `.env` and passes the `VITE_` values as build args. Vite embeds these values during `npm run build`, so rebuild the image whenever you change them:
 
 ```bash
-npm install
-npm run dev
+docker compose up --build
 ```
 
-Open http://localhost:5173 — Vite will hot-reload changes in `src/`.
+## Basic Usage
 
-## Basic usage
+1. Upload a certificate template image.
+2. Upload a dataset.
+3. Add text boxes on the certificate.
+4. Map dataset columns to text boxes.
+5. Choose an export option:
+   - `Local, Zip`: downloads a ZIP file of PNG certificates.
+   - `GDrive, Folder`: uploads PNG certificates to a chosen Drive folder.
+   - `GDrive, Zip`: uploads one ZIP file to a chosen Drive folder.
 
-- Add text boxes using the `Add Text Box` button.
-- Upload a custom font or choose a default font from the font selector.
-- Map columns from the dataset preview to boxes by dragging or dropping.
-- Once you have at least one mapping, open the `Output Preview` panel and click `Show Preview` to render a sample using the first row.
-- Click the preview to maximize it. When ready, click `Generate Certificates` to download a ZIP of generated PNGs.
+For Drive folder exports, you can choose a destination folder, use My Drive root, create a folder inside the selected destination, and optionally create a final certificate folder. If the certificate folder name is blank, images are uploaded directly into the selected destination.
 
-## Google Drive export (optional)
+For Drive ZIP exports, you can choose a destination folder and set the ZIP file name. The `.zip` extension is added automatically if needed.
 
-This app can upload to Google Drive directly from the browser (no server storage). Users only need to approve access; the app owner sets this up once.
+## Production Setup
 
-### One-time app owner setup
-
-1. Create a Google Cloud project.
-2. Enable **Google Drive API**.
-3. Enable **Google Picker API**.
-3. Create an **OAuth Client ID** (Web application).
-4. Add your dev/production origins to **Authorized JavaScript origins**.
-5. Set the client ID in `.env`:
-
-```bash
-VITE_GOOGLE_CLIENT_ID="your-google-oauth-client-id.apps.googleusercontent.com"
-VITE_GOOGLE_API_KEY="your-google-api-key"
-```
-
-### What users do
-
-- Click the Drive option.
-- Grant permission in the Google popup.
-- Uploads go straight to their Drive.
-
-Tokens are stored in `sessionStorage`, so they survive reloads but not closing the tab.
-
-## Key files
-
-- `src/components/WorkspaceCanvas.tsx` — main canvas: renders template image, boxes, arrows and mapping logic.
-- `src/components/DraggableBox.tsx` — draggable boxes and the red target dot.
-- `src/components/CertificatePreview.tsx` — generates the sample output image and preview dialog.
-- `src/components/DatasetPreview.tsx` — dataset table and column drag source.
-
-## Troubleshooting
-
-- If preview doesn't appear, open the browser console (F12 → Console) and look for preview logs/errors.
-- If arrows or dots are misaligned after editing boxes, ensure the template image has finished loading; `WorkspaceCanvas` uses a `scale` value based on the image's displayed width.
-
-## Build for production
+Build locally:
 
 ```bash
 npm run build
 npm run preview
 ```
 
+Build with Docker:
+
+```bash
+docker compose up --build
+```
+
+This app is static. There is no backend server storing files or tokens. Google access tokens are stored in `sessionStorage`, so they survive reloads but not closing the tab.
+
+## Google Drive Keys
+
+Drive export needs two browser-side Google values:
+
+- `VITE_GOOGLE_CLIENT_ID`: OAuth 2.0 Client ID for a Web application.
+- `VITE_GOOGLE_API_KEY`: API key used by Google Picker.
+
+No Google client secret is used in this app. Browser apps cannot keep client secrets private.
+
+The app requests this OAuth scope:
+
+```text
+https://www.googleapis.com/auth/drive.file
+```
+
+### Create the Google Cloud Setup
+
+Use the Google Cloud Console and official docs:
+
+- Google Picker setup: https://developers.google.com/workspace/drive/picker/guides/overview
+- Drive API: https://developers.google.com/drive/api/guides/about-sdk
+- OAuth 2.0 for browser apps: https://developers.google.com/identity/oauth2/web/guides/overview
+- API key restrictions: https://cloud.google.com/docs/authentication/api-keys
+
+Steps:
+
+1. Create or choose a Google Cloud project.
+2. Enable **Google Drive API**.
+3. Enable **Google Picker API**.
+4. Configure the Google Auth consent screen.
+5. Create an OAuth Client ID:
+   - Application type: `Web application`
+   - Authorized JavaScript origins for local dev: `http://localhost:8080`
+   - Authorized JavaScript origins for Docker local: `http://localhost:3000`
+   - Authorized JavaScript origins for production: your deployed origin, for example `https://example.com`
+   - Redirect URIs are not needed for this popup token flow.
+6. Create an API key:
+   - Restrict it to HTTP referrers such as `http://localhost:8080/*`, `http://localhost:3000/*`, and `https://example.com/*`.
+   - Restrict allowed APIs to Google Picker API where available.
+7. Copy the values into `.env`:
+
+```bash
+VITE_GOOGLE_CLIENT_ID=your-google-oauth-client-id.apps.googleusercontent.com
+VITE_GOOGLE_API_KEY=your-google-api-key
+```
+
+If the OAuth app is in testing mode, add test users in Google Cloud. For public production use, publish the OAuth app and complete any Google verification steps requested by the console.
+
+## Key Files
+
+- `src/components/WorkspaceCanvas.tsx`: main canvas, mappings, certificate generation, and export flow.
+- `src/lib/googleDrive.ts`: Google Identity, Picker, folder creation, and Drive uploads.
+- `src/components/DraggableBox.tsx`: draggable text boxes and target dot.
+- `src/components/CertificatePreview.tsx`: sample output preview.
+- `src/components/DatasetPreview.tsx`: dataset table and column drag source.
+
+## Troubleshooting
+
+- If Drive Picker does not open, check that both Google APIs are enabled and the current origin is listed in the OAuth Client ID.
+- If Drive upload fails after the picker works, check the browser console for the Drive API error and confirm the OAuth consent screen allows the app user.
+- If generated text looks wrong, confirm the font loaded before exporting.
+- If arrows or dots are misaligned after resizing, wait for the template image to finish loading and refresh if needed.
+
 ## License
 
-MIT (update as needed).
+MIT

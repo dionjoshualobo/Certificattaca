@@ -1,7 +1,12 @@
 # Build stage
-FROM node:18-alpine as builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
+
+ARG VITE_GOOGLE_CLIENT_ID=""
+ARG VITE_GOOGLE_API_KEY=""
+ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
+ENV VITE_GOOGLE_API_KEY=$VITE_GOOGLE_API_KEY
 
 # Copy package files
 COPY package.json package-lock.json ./
@@ -16,7 +21,7 @@ COPY . .
 RUN npm run build
 
 # Production stage
-FROM node:18-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 
