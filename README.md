@@ -39,12 +39,14 @@ This app can upload to Google Drive directly from the browser (no server storage
 
 1. Create a Google Cloud project.
 2. Enable **Google Drive API**.
+3. Enable **Google Picker API**.
 3. Create an **OAuth Client ID** (Web application).
 4. Add your dev/production origins to **Authorized JavaScript origins**.
 5. Set the client ID in `.env`:
 
 ```bash
 VITE_GOOGLE_CLIENT_ID="your-google-oauth-client-id.apps.googleusercontent.com"
+VITE_GOOGLE_API_KEY="your-google-api-key"
 ```
 
 ### What users do

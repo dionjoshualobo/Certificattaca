@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   ensureDriveAccessToken,
+  pickDriveFolder,
   uploadFolderToDrive,
   uploadZipToDrive,
 } from "@/lib/googleDrive";
@@ -126,6 +127,9 @@ export const WorkspaceCanvas = ({
   const [scrollTick, setScrollTick] = useState(0);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [showCreateNewDialog, setShowCreateNewDialog] = useState(false);
+  const [exportTarget, setExportTarget] = useState<"local-zip" | "drive-zip" | "drive-folder" | null>(null);
+  const [selectedDriveFolder, setSelectedDriveFolder] = useState<{ id: string; name: string } | null>(null);
+  const [isPickingDriveFolder, setIsPickingDriveFolder] = useState(false);
   const defaultFonts = [
     "Arial",
     "Helvetica",
@@ -441,7 +445,7 @@ export const WorkspaceCanvas = ({
     return connections;
   };
 
-  const generateCertificates = async () => {
+  const generateCertificates = async (target: "local-zip" | "drive-zip" | "drive-folder") => {
     if (boxes.length === 0) {
       toast.error("Please add at least one text box");
       return;
@@ -455,6 +459,7 @@ export const WorkspaceCanvas = ({
       return;
     }
 
+    setExportTarget(target);
     // Show naming dialog before generating
     setShowNamingDialog(true);
   };
@@ -585,7 +590,7 @@ export const WorkspaceCanvas = ({
       });
 
       const zipBlob = await zip.generateAsync({ type: "blob" });
-      await uploadZipToDrive(accessToken, "certificates.zip", zipBlob);
+      await uploadZipToDrive(accessToken, "certificates.zip", zipBlob, selectedDriveFolder?.id);
       toast.success("ZIP uploaded to Google Drive");
     } catch (error) {
       console.error(error);
@@ -602,7 +607,12 @@ export const WorkspaceCanvas = ({
       const accessToken = await ensureDriveAccessToken();
       const files = await generateCertificateBlobs();
       const folderName = `certificates-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}`;
-      await uploadFolderToDrive(accessToken, folderName, files.map((file) => ({ name: file.filename, blob: file.blob })));
+      await uploadFolderToDrive(
+        accessToken,
+        folderName,
+        files.map((file) => ({ name: file.filename, blob: file.blob })),
+        selectedDriveFolder?.id
+      );
       toast.success("Certificates uploaded to Google Drive");
     } catch (error) {
       console.error(error);
@@ -610,6 +620,41 @@ export const WorkspaceCanvas = ({
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handlePickDriveFolder = async () => {
+    setIsPickingDriveFolder(true);
+    try {
+      const accessToken = await ensureDriveAccessToken();
+      const folder = await pickDriveFolder(accessToken);
+      setSelectedDriveFolder(folder);
+    } catch (error) {
+      if (String(error).includes("Picker cancelled")) {
+        return;
+      }
+      console.error(error);
+      toast.error("Failed to select a Drive folder");
+    } finally {
+      setIsPickingDriveFolder(false);
+    }
+  };
+
+  const handleExportConfirm = async () => {
+    if (!exportTarget) return;
+    if (exportTarget !== "local-zip" && !selectedDriveFolder) {
+      toast.error("Please choose a Google Drive folder");
+      return;
+    }
+    if (exportTarget === "local-zip") {
+      await proceedWithGeneration();
+      return;
+    }
+    setShowNamingDialog(false);
+    if (exportTarget === "drive-zip") {
+      await handleDriveZip();
+      return;
+    }
+    await handleDriveFolder();
   };
 
   return (
@@ -672,7 +717,7 @@ export const WorkspaceCanvas = ({
         </Button>
         <div className="flex">
           <Button
-            onClick={generateCertificates}
+            onClick={() => generateCertificates("local-zip")}
             disabled={isGenerating || boxes.length === 0}
             className="bg-[#2C1810] hover:bg-[#1a0f08] text-[#F5E6D3] border-2 border-[#654321] shadow-[3px_3px_0_#654321] hover:shadow-[4px_4px_0_#654321] transition-all font-bold font-body uppercase disabled:opacity-50 rounded-r-none"
           >
@@ -702,7 +747,7 @@ export const WorkspaceCanvas = ({
                 className="font-body text-[#2C1810] cursor-pointer"
                 onSelect={(event) => {
                   event.preventDefault();
-                  generateCertificates();
+                  generateCertificates("local-zip");
                 }}
               >
                 Local, Zip
@@ -712,7 +757,7 @@ export const WorkspaceCanvas = ({
                 className="font-body text-[#2C1810] cursor-pointer"
                 onSelect={(event) => {
                   event.preventDefault();
-                  handleDriveFolder();
+                  generateCertificates("drive-folder");
                 }}
               >
                 GDrive, Folder
@@ -721,7 +766,7 @@ export const WorkspaceCanvas = ({
                 className="font-body text-[#2C1810] cursor-pointer"
                 onSelect={(event) => {
                   event.preventDefault();
-                  handleDriveZip();
+                  generateCertificates("drive-zip");
                 }}
               >
                 GDrive, Zip
@@ -958,6 +1003,26 @@ export const WorkspaceCanvas = ({
                 ))}
               </SelectContent>
             </Select>
+            {exportTarget && exportTarget !== "local-zip" && (
+              <div className="mt-4 space-y-2">
+                <p className="text-sm text-[#4A3728] font-body">
+                  Choose a Drive folder to save the export
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={handlePickDriveFolder}
+                    disabled={isPickingDriveFolder}
+                    className="border-2 border-[#8B4513] text-[#8B4513] hover:bg-[#8B4513]/10 font-body uppercase"
+                  >
+                    {isPickingDriveFolder ? "Opening..." : "Choose Folder"}
+                  </Button>
+                  <span className="text-xs text-[#8B4513] font-body truncate max-w-[220px]">
+                    {selectedDriveFolder ? selectedDriveFolder.name : "No folder selected"}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button
@@ -968,7 +1033,7 @@ export const WorkspaceCanvas = ({
               Cancel
             </Button>
             <Button
-              onClick={proceedWithGeneration}
+              onClick={handleExportConfirm}
               className="bg-[#8B4513] hover:bg-[#654321] text-[#F5E6D3] border-2 border-[#654321] shadow-[3px_3px_0_#654321] hover:shadow-[4px_4px_0_#654321] transition-all font-bold font-body uppercase"
             >
               Generate

@@ -18,6 +18,25 @@ declare global {
           }) => { requestAccessToken: (options?: { prompt?: string }) => void };
         };
       };
+      picker?: {
+        Action: { PICKED: string; CANCEL: string };
+        Feature: { NAV_HIDDEN: string };
+        ViewId: { FOLDERS: string };
+        DocsView: new (viewId: string) => {
+          setSelectFolderEnabled: (enabled: boolean) => any;
+        };
+        PickerBuilder: new () => {
+          addView: (view: any) => any;
+          setOAuthToken: (token: string) => any;
+          setDeveloperKey: (key: string) => any;
+          setCallback: (callback: (data: any) => void) => any;
+          enableFeature: (feature: string) => any;
+          build: () => { setVisible: (visible: boolean) => void };
+        };
+      };
+    };
+    gapi?: {
+      load: (api: string, callback: () => void) => void;
     };
   }
 }
@@ -28,6 +47,14 @@ const getClientId = () => {
     throw new Error("Missing VITE_GOOGLE_CLIENT_ID");
   }
   return clientId;
+};
+
+const getApiKey = () => {
+  const apiKey = import.meta.env.VITE_GOOGLE_API_KEY as string | undefined;
+  if (!apiKey) {
+    throw new Error("Missing VITE_GOOGLE_API_KEY");
+  }
+  return apiKey;
 };
 
 const loadGoogleIdentityScript = () => {
@@ -53,6 +80,42 @@ const loadGoogleIdentityScript = () => {
     script.onload = () => resolve();
     script.onerror = () => reject(new Error("Failed to load Google script"));
     document.head.appendChild(script);
+  });
+};
+
+const loadGoogleApiScript = () => {
+  return new Promise<void>((resolve, reject) => {
+    if (window.gapi) {
+      resolve();
+      return;
+    }
+
+    const existing = document.querySelector<HTMLScriptElement>(
+      'script[src="https://apis.google.com/js/api.js"]'
+    );
+    if (existing) {
+      existing.addEventListener("load", () => resolve());
+      existing.addEventListener("error", () => reject(new Error("Failed to load Google API script")));
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://apis.google.com/js/api.js";
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Failed to load Google API script"));
+    document.head.appendChild(script);
+  });
+};
+
+const ensurePickerReady = async () => {
+  await loadGoogleApiScript();
+  if (!window.gapi) {
+    throw new Error("Google API script not available");
+  }
+  await new Promise<void>((resolve) => {
+    window.gapi?.load("picker", () => resolve());
   });
 };
 
@@ -114,7 +177,7 @@ export const ensureDriveAccessToken = async () => {
   });
 };
 
-const createFolder = async (accessToken: string, name: string) => {
+const createFolder = async (accessToken: string, name: string, parentId?: string) => {
   const response = await fetch("https://www.googleapis.com/drive/v3/files", {
     method: "POST",
     headers: {
@@ -124,6 +187,7 @@ const createFolder = async (accessToken: string, name: string) => {
     body: JSON.stringify({
       name,
       mimeType: "application/vnd.google-apps.folder",
+      parents: parentId ? [parentId] : undefined,
     }),
   });
 
@@ -178,21 +242,24 @@ const uploadMultipartFile = async (
 export const uploadZipToDrive = async (
   accessToken: string,
   fileName: string,
-  zipBlob: Blob
+  zipBlob: Blob,
+  parentId?: string
 ) => {
   await uploadMultipartFile(accessToken, {
     name: fileName,
     mimeType: "application/zip",
     data: zipBlob,
+    parentId,
   });
 };
 
 export const uploadFolderToDrive = async (
   accessToken: string,
   folderName: string,
-  files: Array<{ name: string; blob: Blob }>
+  files: Array<{ name: string; blob: Blob }>,
+  parentId?: string
 ) => {
-  const folderId = await createFolder(accessToken, folderName);
+  const folderId = await createFolder(accessToken, folderName, parentId);
   for (const file of files) {
     await uploadMultipartFile(accessToken, {
       name: file.name,
@@ -201,4 +268,36 @@ export const uploadFolderToDrive = async (
       parentId: folderId,
     });
   }
+};
+
+export const pickDriveFolder = async (accessToken: string) => {
+  await ensurePickerReady();
+  const apiKey = getApiKey();
+
+  return new Promise<{ id: string; name: string }>((resolve, reject) => {
+    const view = new window.google!.picker!.DocsView(
+      window.google!.picker!.ViewId.FOLDERS
+    ).setSelectFolderEnabled(true);
+
+    const picker = new window.google!.picker!.PickerBuilder()
+      .addView(view)
+      .setOAuthToken(accessToken)
+      .setDeveloperKey(apiKey)
+      .enableFeature(window.google!.picker!.Feature.NAV_HIDDEN)
+      .setCallback((data: any) => {
+        if (data.action === window.google!.picker!.Action.PICKED) {
+          const doc = data.docs?.[0];
+          if (!doc?.id) {
+            reject(new Error("No folder selected"));
+            return;
+          }
+          resolve({ id: doc.id, name: doc.name || "Drive folder" });
+        } else if (data.action === window.google!.picker!.Action.CANCEL) {
+          reject(new Error("Picker cancelled"));
+        }
+      })
+      .build();
+
+    picker.setVisible(true);
+  });
 };
