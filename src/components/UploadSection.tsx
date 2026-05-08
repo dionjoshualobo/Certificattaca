@@ -10,6 +10,7 @@ interface UploadSectionProps {
   onFileUpload: (file: File) => void;
   uploadedFileName?: string;
   icon: "image" | "data";
+  helperText?: string;
 }
 
 export const UploadSection = ({
@@ -19,6 +20,7 @@ export const UploadSection = ({
   onFileUpload,
   uploadedFileName,
   icon,
+  helperText,
 }: UploadSectionProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -58,6 +60,11 @@ export const UploadSection = ({
           <Upload className="mr-2 h-4 w-4" />
           {uploadedFileName ? "Change File" : "Upload File"}
         </Button>
+        {helperText && (
+          <p className="text-xs text-[#4A3728] font-body text-center">
+            {helperText}
+          </p>
+        )}
         <input
           ref={fileInputRef}
           type="file"

@@ -117,6 +117,7 @@ const Index = () => {
               onFileUpload={handleDatasetUpload}
               uploadedFileName={datasetFile?.name}
               icon="data"
+              helperText="Tip: Put the row you want previewed at the top of the dataset."
             />
           </div>
         )}
