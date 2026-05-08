@@ -143,6 +143,8 @@ export const WorkspaceCanvas = ({
   const [isCreatingDriveFolder, setIsCreatingDriveFolder] = useState(false);
   const defaultFonts = [
     "Arial",
+    "Amsterdam",
+    "Amsterdam Four",
     "Helvetica",
     "Times New Roman",
     "Georgia",
