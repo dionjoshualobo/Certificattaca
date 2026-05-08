@@ -26,6 +26,7 @@ Open http://localhost:5173 — Vite will hot-reload changes in `src/`.
 ## Basic usage
 
 - Add text boxes using the `Add Text Box` button.
+- Upload a custom font or choose a default font from the font selector.
 - Map columns from the dataset preview to boxes by dragging or dropping.
 - Once you have at least one mapping, open the `Output Preview` panel and click `Show Preview` to render a sample using the first row.
 - Click the preview to maximize it. When ready, click `Generate Certificates` to download a ZIP of generated PNGs.

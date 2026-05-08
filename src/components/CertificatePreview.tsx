@@ -16,6 +16,7 @@ interface CertificatePreviewProps {
   columnMappings: ColumnMapping[];
   columns: string[];
   firstRow: string[];
+  fontFamily: string;
 }
 
 export const CertificatePreview = ({
@@ -24,11 +25,22 @@ export const CertificatePreview = ({
   columnMappings,
   columns,
   firstRow,
+  fontFamily,
 }: CertificatePreviewProps) => {
   const [previewImage, setPreviewImage] = useState<string>("");
   const [isMaximized, setIsMaximized] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const ensureFontLoaded = async (family: string) => {
+    if (!family || !document.fonts) return;
+    try {
+      await document.fonts.load(`16px "${family}"`);
+      await document.fonts.ready;
+    } catch (error) {
+      console.warn("Font load skipped:", error);
+    }
+  };
 
   const generatePreview = async () => {
     console.log("🖼️ Generate Preview clicked!", { 
@@ -79,6 +91,8 @@ export const CertificatePreview = ({
       ctx.drawImage(img, 0, 0);
       console.log("✅ Drew base image");
 
+      await ensureFontLoaded(fontFamily);
+
       boxes.forEach((box) => {
         const mapping = columnMappings.find((m) => m.boxId === box.id);
         if (mapping) {
@@ -88,7 +102,7 @@ export const CertificatePreview = ({
           console.log("✅ Drawing text:", text, "at box", box.id);
 
           ctx.fillStyle = "#000000";
-          ctx.font = `${box.height * 0.6}px Arial`;
+          ctx.font = `${box.height * 0.6}px "${fontFamily}", Arial, sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillText(text, box.x + box.width / 2, box.y + box.height / 2);
@@ -112,7 +126,7 @@ export const CertificatePreview = ({
       generatePreview();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [templateUrl, boxes, columnMappings, columns, firstRow, showPreview]);
+  }, [templateUrl, boxes, columnMappings, columns, firstRow, showPreview, fontFamily]);
 
   const canMapPreview = boxes.length > 0 && columnMappings.length > 0;
 

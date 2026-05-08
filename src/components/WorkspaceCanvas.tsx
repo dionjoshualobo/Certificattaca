@@ -21,6 +21,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 // SVG component for curved arrows
 const CurvedArrow = ({ 
@@ -97,8 +104,22 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
   const [isDragging, setIsDragging] = useState(false);
   const [showNamingDialog, setShowNamingDialog] = useState(false);
   const [namingOption, setNamingOption] = useState<string>("default");
+  const defaultFonts = [
+    "Arial",
+    "Times New Roman",
+    "Georgia",
+    "Garamond",
+    "Verdana",
+    "Tahoma",
+    "Trebuchet MS",
+    "Courier New",
+  ];
+  const [fontOptions, setFontOptions] = useState<string[]>(defaultFonts);
+  const [selectedFont, setSelectedFont] = useState<string>(defaultFonts[0]);
+  const [uploadedFontName, setUploadedFontName] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
+  const fontInputRef = useRef<HTMLInputElement>(null);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const [scale, setScale] = useState(1);
 
@@ -185,6 +206,43 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
 
   const updateBox = (updatedBox: BoxPosition) => {
     setBoxes(boxes.map((b) => (b.id === updatedBox.id ? updatedBox : b)));
+  };
+
+  const ensureFontLoaded = async (fontFamily: string) => {
+    if (!fontFamily || !document.fonts) return;
+    try {
+      await document.fonts.load(`16px "${fontFamily}"`);
+      await document.fonts.ready;
+    } catch (error) {
+      console.warn("Font load skipped:", error);
+    }
+  };
+
+  const sanitizeFontName = (name: string) =>
+    name
+      .replace(/\.[^/.]+$/, "")
+      .replace(/[^a-zA-Z0-9-_ ]/g, "")
+      .trim() || "Custom Font";
+
+  const handleFontUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const fontFamily = sanitizeFontName(file.name);
+    const fontUrl = URL.createObjectURL(file);
+
+    try {
+      const fontFace = new FontFace(fontFamily, `url(${fontUrl})`);
+      await fontFace.load();
+      document.fonts.add(fontFace);
+      setFontOptions((prev) => (prev.includes(fontFamily) ? prev : [fontFamily, ...prev]));
+      setSelectedFont(fontFamily);
+      setUploadedFontName(file.name);
+      toast.success(`Font "${fontFamily}" loaded`);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to load font file");
+    }
   };
 
   const deleteBox = (id: string) => {
@@ -364,6 +422,8 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
         img.src = templateUrl;
       });
 
+      await ensureFontLoaded(selectedFont);
+
       const usedFilenames = new Set<string>();
       
       for (let i = 0; i < rows.length; i++) {
@@ -383,7 +443,7 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
             const text = rows[i][colIndex] || "";
 
             ctx.fillStyle = "#000000";
-            ctx.font = `${box.height * 0.6}px Arial`;
+            ctx.font = `${box.height * 0.6}px "${selectedFont}", Arial, sans-serif`;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
             ctx.fillText(text, box.x + box.width / 2, box.y + box.height / 2);
@@ -407,7 +467,7 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
           } else {
             const nameValue = rows[i][colIndex] || `certificate-${i + 1}`;
             const sanitized = sanitizeFilename(nameValue);
-            let baseName = sanitized || `certificate-${i + 1}`;
+            const baseName = sanitized || `certificate-${i + 1}`;
             
             // Handle duplicate filenames by adding a counter
             let finalName = `${baseName}.png`;
@@ -451,6 +511,53 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
           <Plus className="mr-2 h-4 w-4" />
           Add Text Box
         </Button>
+
+        <div className="flex items-center gap-2">
+          <input
+            ref={fontInputRef}
+            type="file"
+            accept=".ttf,.otf,.woff,.woff2"
+            className="hidden"
+            onChange={handleFontUpload}
+          />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                className="border-2 border-[#8B4513] text-[#8B4513] hover:bg-[#8B4513]/10 font-body uppercase"
+              >
+                Font: {selectedFont}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="bg-[#F5E6D3] border-2 border-[#8B4513]">
+              <DropdownMenuItem
+                className="font-body text-[#2C1810] cursor-pointer"
+                onSelect={(event) => {
+                  event.preventDefault();
+                  fontInputRef.current?.click();
+                }}
+              >
+                Upload Font
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-[#8B4513]/30" />
+              {fontOptions.map((font) => (
+                <DropdownMenuItem
+                  key={font}
+                  className="font-body text-[#2C1810] cursor-pointer"
+                  onSelect={() => setSelectedFont(font)}
+                >
+                  {font}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {uploadedFontName && (
+            <span className="text-xs text-[#8B4513] font-body truncate max-w-[140px]" title={uploadedFontName}>
+              {uploadedFontName}
+            </span>
+          )}
+        </div>
+
         <Button
           onClick={generateCertificates}
           disabled={isGenerating || boxes.length === 0}
@@ -523,6 +630,7 @@ export const WorkspaceCanvas = ({ templateUrl, columns, rows }: WorkspaceCanvasP
             columnMappings={columnMappings}
             columns={columns}
             firstRow={rows[0] || []}
+            fontFamily={selectedFont}
           />
         </div>
       </div>
