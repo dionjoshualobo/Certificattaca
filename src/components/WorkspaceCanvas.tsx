@@ -119,17 +119,20 @@ export const WorkspaceCanvas = ({
   const [showNamingDialog, setShowNamingDialog] = useState(false);
   const [namingOption, setNamingOption] = useState<string>("default");
   const [scrollTick, setScrollTick] = useState(0);
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [showCreateNewDialog, setShowCreateNewDialog] = useState(false);
   const defaultFonts = [
     "Arial",
+    "Helvetica",
     "Times New Roman",
     "Georgia",
-    "Garamond",
     "Verdana",
     "Tahoma",
     "Trebuchet MS",
     "Courier New",
   ];
   const [fontOptions, setFontOptions] = useState<string[]>(defaultFonts);
+  const [uploadedFonts, setUploadedFonts] = useState<string[]>([]);
   const [selectedFont, setSelectedFont] = useState<string>(defaultFonts[0]);
   const [uploadedFontName, setUploadedFontName] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -261,7 +264,7 @@ export const WorkspaceCanvas = ({
       const fontFace = new FontFace(fontFamily, `url(${fontUrl})`);
       await fontFace.load();
       document.fonts.add(fontFace);
-      setFontOptions((prev) => (prev.includes(fontFamily) ? prev : [fontFamily, ...prev]));
+      setUploadedFonts((prev) => (prev.includes(fontFamily) ? prev : [fontFamily, ...prev]));
       setSelectedFont(fontFamily);
       setUploadedFontName(file.name);
       toast.success(`Font "${fontFamily}" loaded`);
@@ -361,6 +364,15 @@ export const WorkspaceCanvas = ({
     setDraggingColumn(null);
     setHoveredBox(null);
     setIsDragging(false);
+  };
+
+  const resetBoxesAndMappings = () => {
+    setBoxes([]);
+    setColumnMappings([]);
+    setDraggingColumn(null);
+    setHoveredBox(null);
+    setIsDragging(false);
+    toast.success("Text boxes and mappings cleared");
   };
 
   const getConnectionLines = () => {
@@ -577,7 +589,7 @@ export const WorkspaceCanvas = ({
                 Upload Font
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-[#8B4513]/30" />
-              {fontOptions.map((font) => (
+              {[...uploadedFonts, ...fontOptions].map((font) => (
                 <DropdownMenuItem
                   key={font}
                   className="font-body text-[#2C1810] cursor-pointer"
@@ -588,13 +600,15 @@ export const WorkspaceCanvas = ({
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          {uploadedFontName && (
-            <span className="text-xs text-[#8B4513] font-body truncate max-w-[140px]" title={uploadedFontName}>
-              {uploadedFontName}
-            </span>
-          )}
         </div>
 
+        <Button
+          onClick={() => setShowResetDialog(true)}
+          disabled={boxes.length === 0 && columnMappings.length === 0}
+          className="bg-[#2C1810] hover:bg-[#1a0f08] text-[#F5E6D3] border-2 border-[#654321] shadow-[3px_3px_0_#654321] hover:shadow-[4px_4px_0_#654321] transition-all font-bold font-body uppercase disabled:opacity-50"
+        >
+          Reset Boxes
+        </Button>
         <Button
           onClick={generateCertificates}
           disabled={isGenerating || boxes.length === 0}
@@ -613,7 +627,7 @@ export const WorkspaceCanvas = ({
           )}
         </Button>
         <Button
-          onClick={onCreateNew}
+          onClick={() => setShowCreateNewDialog(true)}
           className="bg-[#2C1810] hover:bg-[#1a0f08] text-[#F5E6D3] border-2 border-[#654321] shadow-[3px_3px_0_#654321] hover:shadow-[4px_4px_0_#654321] transition-all font-bold font-body uppercase"
         >
           Create New
@@ -854,6 +868,70 @@ export const WorkspaceCanvas = ({
               className="bg-[#8B4513] hover:bg-[#654321] text-[#F5E6D3] border-2 border-[#654321] shadow-[3px_3px_0_#654321] hover:shadow-[4px_4px_0_#654321] transition-all font-bold font-body uppercase"
             >
               Generate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Boxes Confirmation */}
+      <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <DialogContent className="bg-[#F5E6D3] border-4 border-[#8B4513]">
+          <DialogHeader>
+            <DialogTitle className="font-body text-[#8B4513] uppercase text-xl">
+              ✦ Reset Boxes ✦
+            </DialogTitle>
+            <DialogDescription className="text-[#4A3728] font-body">
+              This will remove all text boxes and mappings from the canvas.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowResetDialog(false)}
+              className="border-2 border-[#8B4513] text-[#8B4513] hover:bg-[#8B4513]/10 font-body uppercase"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                resetBoxesAndMappings();
+                setShowResetDialog(false);
+              }}
+              className="bg-[#8B4513] hover:bg-[#654321] text-[#F5E6D3] border-2 border-[#654321] shadow-[3px_3px_0_#654321] hover:shadow-[4px_4px_0_#654321] transition-all font-bold font-body uppercase"
+            >
+              Reset
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create New Confirmation */}
+      <Dialog open={showCreateNewDialog} onOpenChange={setShowCreateNewDialog}>
+        <DialogContent className="bg-[#F5E6D3] border-4 border-[#8B4513]">
+          <DialogHeader>
+            <DialogTitle className="font-body text-[#8B4513] uppercase text-xl">
+              ✦ Create New ✦
+            </DialogTitle>
+            <DialogDescription className="text-[#4A3728] font-body">
+              This will clear your current template and dataset and return you to the home screen.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowCreateNewDialog(false)}
+              className="border-2 border-[#8B4513] text-[#8B4513] hover:bg-[#8B4513]/10 font-body uppercase"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                onCreateNew();
+                setShowCreateNewDialog(false);
+              }}
+              className="bg-[#8B4513] hover:bg-[#654321] text-[#F5E6D3] border-2 border-[#654321] shadow-[3px_3px_0_#654321] hover:shadow-[4px_4px_0_#654321] transition-all font-bold font-body uppercase"
+            >
+              Create New
             </Button>
           </DialogFooter>
         </DialogContent>
