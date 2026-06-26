@@ -6,6 +6,7 @@ import { DatasetPreview, ColumnMapping } from "./DatasetPreview";
 import { CertificatePreview } from "./CertificatePreview";
 import { toast } from "sonner";
 import JSZip from "jszip";
+import CertificateWorker from "@/lib/certificateWorker?worker";
 import {
   Dialog,
   DialogContent,
@@ -40,33 +41,33 @@ import {
 } from "@/lib/googleDrive";
 
 // SVG component for curved arrows
-const CurvedArrow = ({ 
-  start, 
-  end, 
-  isActive = false, 
-  color = "#8B4513" 
-}: { 
-  start: { x: number; y: number }; 
-  end: { x: number; y: number }; 
+const CurvedArrow = ({
+  start,
+  end,
+  isActive = false,
+  color = "#8B4513"
+}: {
+  start: { x: number; y: number };
+  end: { x: number; y: number };
   isActive?: boolean;
   color?: string;
 }) => {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const distance = Math.sqrt(dx * dx + dy * dy);
-  
+
   // Create a curved path
   const curvature = Math.min(distance / 3, 100);
   const midX = (start.x + end.x) / 2;
   const midY = (start.y + end.y) / 2;
-  
+
   // Control point for the curve (offset perpendicular to the line)
   const controlX = midX + (dy / distance) * curvature;
   const controlY = midY - (dx / distance) * curvature;
-  
+
   const pathData = `M ${start.x} ${start.y} Q ${controlX} ${controlY} ${end.x} ${end.y}`;
   const markerId = `arrow-${Math.random().toString(36).substr(2, 9)}`;
-  
+
   return (
     <g>
       <defs>
@@ -160,6 +161,9 @@ export const WorkspaceCanvas = ({
   const templateInputRef = useRef<HTMLInputElement>(null);
   const datasetInputRef = useRef<HTMLInputElement>(null);
   const drivePickerActiveRef = useRef(false);
+  const fontBuffersRef = useRef<Record<string, ArrayBuffer>>({});
+  const activeWorkersRef = useRef<Worker[]>([]);
+  const isCancelledRef = useRef<boolean>(false);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const [scale, setScale] = useState(1);
 
@@ -218,7 +222,7 @@ export const WorkspaceCanvas = ({
 
         if (currentHoveredBox) {
           setHoveredBox(currentHoveredBox.id);
-          
+
           // Get the actual center position from the DOM element (where the red dot is)
           const center = getBoxCenter(currentHoveredBox.id);
           if (center) {
@@ -281,6 +285,8 @@ export const WorkspaceCanvas = ({
     const fontUrl = URL.createObjectURL(file);
 
     try {
+      const arrayBuffer = await file.arrayBuffer();
+      fontBuffersRef.current[fontFamily] = arrayBuffer;
       const fontFace = new FontFace(fontFamily, `url(${fontUrl})`);
       await fontFace.load();
       document.fonts.add(fontFace);
@@ -315,7 +321,7 @@ export const WorkspaceCanvas = ({
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
     // Only handle mouse move if we're dragging a column
     if (!draggingColumn || !imageRef.current) return;
-    
+
     // Check if mouse is over any box
     const rect = imageRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / scale;
@@ -328,7 +334,7 @@ export const WorkspaceCanvas = ({
 
     if (currentHoveredBox) {
       setHoveredBox(currentHoveredBox.id);
-      
+
       // Get the actual center position from the DOM element (where the red dot is)
       const center = getBoxCenter(currentHoveredBox.id);
       if (center) {
@@ -337,9 +343,9 @@ export const WorkspaceCanvas = ({
     } else {
       setHoveredBox(null);
       // When not hovering over a box, follow the actual mouse position
-      setMousePos({ 
-        x: e.clientX, 
-        y: e.clientY 
+      setMousePos({
+        x: e.clientX,
+        y: e.clientY
       });
     }
   };
@@ -379,7 +385,7 @@ export const WorkspaceCanvas = ({
 
       toast.success(`Mapped "${draggingColumn}" to ${hoveredBox}`);
     }
-    
+
     setDraggingColumn(null);
     setHoveredBox(null);
     setIsDragging(false);
@@ -424,7 +430,7 @@ export const WorkspaceCanvas = ({
           if (datasetElement) {
             const datasetRect = datasetElement.getBoundingClientRect();
             const imageRect = imageRef.current.getBoundingClientRect();
-            
+
             // Start position: center-bottom of the column header arrow icon
             const start = {
               x: datasetRect.left + datasetRect.width / 2,
@@ -490,7 +496,7 @@ export const WorkspaceCanvas = ({
       .replace(/\s+/g, '-') // Replace spaces with hyphens
       .replace(/^-+|-+$/g, '') // Remove leading/trailing hyphens
       .substring(0, 200); // Limit length
-    
+
     // Return empty string if nothing valid remains
     return sanitized.trim();
   };
@@ -511,6 +517,7 @@ export const WorkspaceCanvas = ({
   };
 
   const generateCertificateBlobs = async () => {
+    isCancelledRef.current = false;
     const img = new Image();
     img.crossOrigin = "anonymous";
     await new Promise((resolve, reject) => {
@@ -519,39 +526,12 @@ export const WorkspaceCanvas = ({
       img.src = templateUrl;
     });
 
-    await ensureFontLoaded(selectedFont);
+    const useWorker = typeof Worker !== "undefined" && typeof OffscreenCanvas !== "undefined";
 
     const usedFilenames = new Set<string>();
-    const results: Array<{ filename: string; blob: Blob }> = [];
+    const tasks: any[] = [];
 
     for (let i = 0; i < rows.length; i++) {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext("2d");
-
-      if (!ctx) continue;
-
-      ctx.drawImage(img, 0, 0);
-
-      boxes.forEach((box) => {
-        const mapping = columnMappings.find((m) => m.boxId === box.id);
-        if (mapping) {
-          const colIndex = columns.indexOf(mapping.columnId);
-          const text = rows[i][colIndex] || "";
-
-          ctx.fillStyle = "#000000";
-          ctx.font = `${box.height * 0.9}px "${selectedFont}", Arial, sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(text, box.x + box.width / 2, box.y + box.height / 2);
-        }
-      });
-
-      const blob = await new Promise<Blob>((resolve) => {
-        canvas.toBlob((b) => resolve(b!), "image/png");
-      });
-
       let filename: string;
       if (namingOption === "default") {
         filename = `certificate-${i + 1}.png`;
@@ -575,7 +555,96 @@ export const WorkspaceCanvas = ({
         }
       }
 
-      results.push({ filename, blob });
+      const texts = boxes.map((box) => {
+        const mapping = columnMappings.find((m) => m.boxId === box.id);
+        let text = "";
+        if (mapping) {
+          const colIndex = columns.indexOf(mapping.columnId);
+          text = rows[i][colIndex] || "";
+        }
+        return { text, x: box.x, y: box.y, width: box.width, height: box.height };
+      }).filter(t => t.text !== "");
+
+      tasks.push({ id: i, filename, texts });
+    }
+
+    if (useWorker) {
+      console.log("Using Web Workers for generation");
+      const templateBlob = await fetch(templateUrl).then(r => r.blob());
+      const fontBuffer = fontBuffersRef.current[selectedFont] || null;
+      if (isCancelledRef.current) throw new Error("Cancelled");
+
+      const numCores = navigator.hardwareConcurrency || 4;
+      const numWorkers = Math.min(numCores, tasks.length);
+      activeWorkersRef.current = [];
+      const workerPromises: Promise<any[]>[] = [];
+
+      const chunkSize = Math.ceil(tasks.length / numWorkers);
+      for (let i = 0; i < numWorkers; i++) {
+        const workerTasks = tasks.slice(i * chunkSize, (i + 1) * chunkSize);
+        if (workerTasks.length === 0) continue;
+
+        const worker = new CertificateWorker();
+        activeWorkersRef.current.push(worker);
+
+        workerPromises.push(new Promise((resolve, reject) => {
+          worker.onmessage = (e) => {
+            if (e.data.error) reject(new Error(e.data.error));
+            else resolve(e.data.results);
+          };
+          worker.onerror = (e) => reject(e);
+          worker.postMessage({
+            jobId: `job-${i}`,
+            templateBlob,
+            fontName: selectedFont,
+            fontBuffer,
+            width: img.naturalWidth,
+            height: img.naturalHeight,
+            tasks: workerTasks,
+          });
+        }));
+      }
+
+      try {
+        const resultsArray = await Promise.all(workerPromises);
+        activeWorkersRef.current.forEach(w => w.terminate());
+        activeWorkersRef.current = [];
+        if (isCancelledRef.current) throw new Error("Cancelled");
+        return resultsArray.flat();
+      } catch (err) {
+        activeWorkersRef.current.forEach(w => w.terminate());
+        activeWorkersRef.current = [];
+        throw err;
+      }
+    }
+
+    await ensureFontLoaded(selectedFont);
+    const results: Array<{ filename: string; blob: Blob }> = [];
+
+    for (let i = 0; i < tasks.length; i++) {
+      if (isCancelledRef.current) throw new Error("Cancelled");
+      const task = tasks[i];
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+
+      if (!ctx) continue;
+
+      ctx.drawImage(img, 0, 0);
+
+      task.texts.forEach((t: any) => {
+        ctx.fillStyle = "#000000";
+        ctx.font = `${t.height * 0.9}px "${selectedFont}", Arial, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(t.text, t.x + t.width / 2, t.y + t.height / 2);
+      });
+
+      const blob = await new Promise<Blob>((resolve) => {
+        canvas.toBlob((b) => resolve(b!), "image/png");
+      });
+      results.push({ filename: task.filename, blob });
     }
 
     return results;
@@ -603,9 +672,11 @@ export const WorkspaceCanvas = ({
       URL.revokeObjectURL(url);
 
       toast.success(`Generated ${rows.length} certificates!`);
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to generate certificates");
+    } catch (error: any) {
+      if (error.message !== "Cancelled") {
+        console.error(error);
+        toast.error("Failed to generate certificates");
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -627,9 +698,11 @@ export const WorkspaceCanvas = ({
       await uploadZipToDrive(accessToken, fileName, zipBlob, parentId);
       setDriveZipFileName(fileName);
       toast.success("ZIP uploaded to Google Drive");
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to upload ZIP to Google Drive");
+    } catch (error: any) {
+      if (error.message !== "Cancelled") {
+        console.error(error);
+        toast.error("Failed to upload ZIP to Google Drive");
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -661,9 +734,11 @@ export const WorkspaceCanvas = ({
       }
       setNewDriveFolderName("");
       toast.success("Certificates uploaded to Google Drive");
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to upload certificates to Google Drive");
+    } catch (error: any) {
+      if (error.message !== "Cancelled") {
+        console.error(error);
+        toast.error("Failed to upload certificates to Google Drive");
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -860,6 +935,20 @@ export const WorkspaceCanvas = ({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {isGenerating && (
+            <Button
+              onClick={() => {
+                isCancelledRef.current = true;
+                activeWorkersRef.current.forEach(w => w.terminate());
+                activeWorkersRef.current = [];
+                setIsGenerating(false);
+                toast.info("Certificate generation cancelled");
+              }}
+              className="ml-2 bg-[#8B0000] hover:bg-[#660000] text-[#F5E6D3] border-2 border-[#4d0000] shadow-[3px_3px_0_#4d0000] hover:shadow-[4px_4px_0_#4d0000] transition-all font-bold font-body uppercase"
+            >
+              Cancel
+            </Button>
+          )}
         </div>
         <Button
           onClick={() => setShowCreateNewDialog(true)}
@@ -958,7 +1047,7 @@ export const WorkspaceCanvas = ({
             columnMappings={columnMappings}
             onRemoveMapping={handleRemoveMapping}
           />
-          
+
           <CertificatePreview
             templateUrl={templateUrl}
             boxes={boxes}
@@ -972,12 +1061,12 @@ export const WorkspaceCanvas = ({
 
       {/* Render connection lines with clean arrows pointing to red dots */}
       {!isDragging && columnMappings.length > 0 && (
-        <svg 
+        <svg
           key={`connections-${scrollTick}`}
           className="fixed inset-0 pointer-events-none"
-          style={{ 
-            zIndex: 5, 
-            width: '100vw', 
+          style={{
+            zIndex: 5,
+            width: '100vw',
             height: '100vh',
             overflow: 'visible'
           }}
