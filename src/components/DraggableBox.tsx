@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useIsMobile } from '@/hooks/use-mobile';
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -21,6 +22,7 @@ interface DraggableBoxProps {
 }
 
 export const DraggableBox = ({ box, onUpdate, onDelete, scale, isDraggingColumn, isHovered }: DraggableBoxProps) => {
+  const isMobile = useIsMobile();
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -170,7 +172,11 @@ export const DraggableBox = ({ box, onUpdate, onDelete, scale, isDraggingColumn,
     };
   }, [isDragging, isResizing, box, onUpdate, scale]);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
+  if (isMobile && e.type === 'touchstart') {
+    e.preventDefault();
+  }
+  if (isDragging) return;
     if (isDraggingColumn) return; // Disable during column drag
     e.preventDefault();
     e.stopPropagation();
