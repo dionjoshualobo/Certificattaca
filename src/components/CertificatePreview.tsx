@@ -3,6 +3,7 @@ import { Maximize2, Minimize2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BoxPosition } from "./DraggableBox";
 import { ColumnMapping } from "./DatasetPreview";
+import { drawTextInBox } from "@/lib/canvasText";
 import {
   Dialog,
   DialogContent,
@@ -102,10 +103,7 @@ export const CertificatePreview = ({
           console.log("✅ Drawing text:", text, "at box", box.id);
 
           ctx.fillStyle = "#000000";
-          ctx.font = `${box.height * 0.9}px "${fontFamily}", Arial, sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(text, box.x + box.width / 2, box.y + box.height / 2);
+          drawTextInBox(ctx, text, fontFamily, box);
         }
       });
 

@@ -5,6 +5,7 @@ import { DraggableBox, BoxPosition } from "./DraggableBox";
 import { DatasetPreview, ColumnMapping } from "./DatasetPreview";
 import { CertificatePreview } from "./CertificatePreview";
 import { toast } from "sonner";
+import { drawTextInBox } from "@/lib/canvasText";
 import JSZip from "jszip";
 import {
   Dialog,
@@ -541,10 +542,7 @@ export const WorkspaceCanvas = ({
           const text = rows[i][colIndex] || "";
 
           ctx.fillStyle = "#000000";
-          ctx.font = `${box.height * 0.9}px "${selectedFont}", Arial, sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(text, box.x + box.width / 2, box.y + box.height / 2);
+          drawTextInBox(ctx, text, selectedFont, box);
         }
       });
 
@@ -768,7 +766,7 @@ export const WorkspaceCanvas = ({
               <Button
                 className="bg-[#8B4513] hover:bg-[#654321] text-[#F5E6D3] border-2 border-[#654321] shadow-[3px_3px_0_#654321] hover:shadow-[4px_4px_0_#654321] transition-all font-bold font-body uppercase"
               >
-                Font: {selectedFont}
+                Font: <span style={{ fontFamily: selectedFont }}>{selectedFont}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="bg-[#F5E6D3] border-2 border-[#8B4513]">
@@ -786,6 +784,7 @@ export const WorkspaceCanvas = ({
                 <DropdownMenuItem
                   key={font}
                   className="font-body text-[#2C1810] cursor-pointer"
+                  style={{ fontFamily: font }}
                   onSelect={() => setSelectedFont(font)}
                 >
                   {font}
