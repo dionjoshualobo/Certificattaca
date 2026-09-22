@@ -28,7 +28,6 @@ export const CertificatePreview = ({
   fontFamily,
 }: CertificatePreviewProps) => {
   const [previewImage, setPreviewImage] = useState<string>("");
-  const isMobile = useIsMobile();
   const [isMaximized, setIsMaximized] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -131,6 +130,8 @@ export const CertificatePreview = ({
 
   const canMapPreview = boxes.length > 0 && columnMappings.length > 0;
 
+  const handleMaximize = () => setIsMaximized(true);
+
   return (
     <>
       <canvas ref={canvasRef} className="hidden" />
@@ -169,7 +170,6 @@ export const CertificatePreview = ({
           <div className="bg-[#8B4513] text-[#F5E6D3] px-4 py-2 font-body font-bold uppercase text-sm flex items-center justify-between">
             <span>📋 Output Preview</span>
             <button
-  onClick={handleMaximize}
               onClick={handleMaximize}
               className="hover:bg-[#654321] p-1 rounded transition-colors"
               title="Maximize preview"
@@ -199,7 +199,6 @@ export const CertificatePreview = ({
             <DialogTitle className="font-body text-[#8B4513] uppercase text-xl flex items-center justify-between">
               <span>📋 Certificate Preview - Sample Output</span>
               <button
-  onClick={handleMaximize}
                 onClick={() => setIsMaximized(false)}
                 className="hover:bg-[#8B4513]/10 p-2 rounded transition-colors"
               >

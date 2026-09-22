@@ -181,10 +181,14 @@ export const DraggableBox = ({ box, onUpdate, onDelete, scale, isDraggingColumn,
     e.preventDefault();
     e.stopPropagation();
     
+    const point = "clientX" in e
+      ? { x: e.clientX, y: e.clientY }
+      : { x: e.touches[0].clientX, y: e.touches[0].clientY };
+
     setIsDragging(true);
     startPos.current = {
-      x: e.clientX,
-      y: e.clientY,
+      x: point.x,
+      y: point.y,
       boxX: box.x,
       boxY: box.y,
       width: box.width,

@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 
 export const ThemeToggle = () => {
-  const isMobile = useIsMobile();
   const [theme, setTheme] = useState<"light" | "dark">("dark");
 
   useEffect(() => {
